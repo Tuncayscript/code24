@@ -33,21 +33,21 @@ end program
 
 ## Built With
 * Ada 83 - For Some mathematical capabilities
-Assembly - For Cross-Platfrom Capabalities
-Machine Code - For Manually adapting language for close-to-the-metal memory and hardware control.
-Objective-C/C++ - For memory and hardware allocation capabalities
-C/C++ - The main programming language used
-ANTLR - Used to generate language recognition components
-LLVM - For constructing compiler
-CMake - A software construction tool
+* Assembly - For Cross-Platfrom Capabalities
+* Machine Code - For Manually adapting language for close-to-the-metal memory and hardware control.
+* Objective-C/C++ - For memory and hardware allocation capabalities
+* C/C++ - The main programming language used
+* ANTLR - Used to generate language recognition components
+* LLVM - For constructing compiler
+* CMake - A software construction tool
 
 
 ## Authors
-Tunjay Akbarli (Me) - Initial work - tunjayakbarli@it-gss.com
-Tristan Hilbert - Compiler Engineering - tristanhilbert@it-gss.com
-Martins Iwuogor - Compiler Development - martinsiwuogor@it-gss.com
-Maryna Rybalko - Publisizing - maryna.rybalko@it-gss.com
-Ravan Sariyev - Publisizing - ravansariyev@it-gss.com
+* Tunjay Akbarli (Me) - Initial work - tunjayakbarli@it-gss.com
+* Tristan Hilbert - Compiler Engineering - tristanhilbert@it-gss.com
+* Martins Iwuogor - Compiler Development - martinsiwuogor@it-gss.com
+* Maryna Rybalko - Publisizing - maryna.rybalko@it-gss.com
+* Ravan Sariyev - Publisizing - ravansariyev@it-gss.com
 
 ## Contributing
 Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are greatly appreciated.
