@@ -32,7 +32,7 @@ end program
 - **Visibility and Accessibility**: Introduces hybrid visibility and accessibility modifiers for classes and subroutines.
 
 ## Built With
-Ada 83 - For Some mathematical capabilities
+* Ada 83 - For Some mathematical capabilities
 Assembly - For Cross-Platfrom Capabalities
 Machine Code - For Manually adapting language for close-to-the-metal memory and hardware control.
 Objective-C/C++ - For memory and hardware allocation capabalities
