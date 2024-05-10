@@ -1,7 +1,7 @@
 imports Language
 
 module APR_1_0_0
-    function F(ByRef p As Integer) as object
+    function F(byRef p as integer) as object
         p += 1
     end function
 
@@ -9,7 +9,7 @@ module APR_1_0_0
         variable a as integer = 1
         F(a)
         if (a = 1) Then
-            output("#A1, Unexcepted Behaviour in Arguments_ByReferenceA.vb") : Return 1
+            output("#A1, Unexcepted Behaviour in Arguments_ByReferenceA.vb") : return 1
         end if
     end function
 end module
