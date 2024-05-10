@@ -3,15 +3,38 @@
 Code is an innovative programming language that combines the efficiency and speed of Go with the elegance and practicality of Visual Basic. It's designed to be fast, safe, and suitable for both systems programming and rapid application development.
 
 ```main.code
+imports Language ' In New Version, STDlib planned will be built in
+
+namespace Geometry
+
+    public class Circle
+        public property Radius as single
+    end class
+
+    public module CircleHelpers
+        public procedure PrintTotalArea(circles As List(Of Circle))
+            variable totalArea as single = 0
+            for each circle as Circle in circles
+                totalArea += PI * circle.Radius * circle.Radius
+            next
+            output("Total area: " & totalArea)
+        end procedure
+    end module
+
+end namespace
+
 module Program
+    procedure Main()
+        ' Create a list of Circle instances with different radii
+        variable circles as new List(Of Geometry.Circle) from {
+            new Geometry.Circle with {.Radius = 1.0F},
+            new Geometry.Circle with {.Radius = 2.0F}
+        }
 
-  procedure main()
-
-    Output("Hello World!")
-
-  end procedure
-
-end program 
+        ' Call the function to print the total area
+        Geometry.CircleHelpers.PrintTotalArea(circles)
+    end procedure
+end module
 ```
 
 ## Key Features
