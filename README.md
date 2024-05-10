@@ -36,7 +36,7 @@ end program
 * Assembly - For Cross-Platfrom Capabalities
 * Machine Code - For Manually adapting language for close-to-the-metal memory and hardware control.
 * Objective-C/C++ - For memory and hardware allocation capabalities
-* C/C++ - The main programming language used
+* C/C++20 - The main programming language used
 * ANTLR - Used to generate language recognition components
 * LLVM - For constructing compiler
 * CMake - A software construction tool
@@ -44,8 +44,10 @@ end program
 
 ## Authors
 * Tunjay Akbarli (Me) - Initial work - tunjayakbarli@it-gss.com
-* Tristan Hilbert - Compiler Engineering - tristanhilbert@it-gss.com
-* Martins Iwuogor - Compiler Development - martinsiwuogor@it-gss.com
+* Tural Guliyev - Cross-Compilations - turalquliyev@it-gss.com
+* Teymur Novruzov - Lead Architect - teymurnovruzov@it-gss.com
+* Tristan Hilbert - Compiler Engineer - tristanhilbert@it-gss.com
+* Martins Iwuogor - Compiler Developer - martinsiwuogor@it-gss.com
 * Maryna Rybalko - Publisizing - maryna.rybalko@it-gss.com
 * Ravan Sariyev - Publisizing - ravansariyev@it-gss.com
 
