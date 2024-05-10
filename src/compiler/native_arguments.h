@@ -1,0 +1,249 @@
+/*
+ * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * Contact with ITGSS, 651 N Broad St, Suite 201, in the
+ * city of Middletown, zip code 19709, and county of New Castle, state of Delaware.
+ * or visit www.it-gss.com if you need additional information or have any
+ * questions.
+ *
+ */
+
+#ifndef RUNTIME_VM_NATIVE_ARGUMENTS_H_
+#define RUNTIME_VM_NATIVE_ARGUMENTS_H_
+
+#include "platform/assert.h"
+#include "platform/memory_sanitizer.h"
+#include "src/globals.h"
+#include "src/simulator.h"
+#include "src/stub_code.h"
+
+namespace Code {
+
+// Forward declarations.
+class BootstrapNatives;
+class Object;
+class Simulator;
+class Thread;
+
+#if defined(TESTING) || defined(DEBUG)
+
+#if defined(USING_SIMULATOR)
+#define CHECK_STACK_ALIGNMENT                                                  \
+  {                                                                            \
+    uword current_sp = Simulator::Current()->get_register(SPREG);              \
+    ASSERT(Utils::IsAligned(current_sp, OS::ActivationFrameAlignment()));      \
+  }
+#elif defined(CODE_HOST_OS_WINDOWS)
+// The compiler may dynamically align the stack on Windows, so do not check.
+#define CHECK_STACK_ALIGNMENT                                                  \
+  {}
+#else
+#define CHECK_STACK_ALIGNMENT                                                  \
+  {                                                                            \
+    uword (*func)() = reinterpret_cast<uword (*)()>(                           \
+        StubCode::GetCStackPointer().EntryPoint());                            \
+    uword current_sp = func();                                                 \
+    ASSERT(Utils::IsAligned(current_sp, OS::ActivationFrameAlignment()));      \
+  }
+#endif
+
+#define DEOPTIMIZE_ALOT                                                        \
+  if (FLAG_deoptimize_alot) {                                                  \
+    DeoptimizeFunctionsOnStack();                                              \
+  }
+
+#else
+
+#define CHECK_STACK_ALIGNMENT                                                  \
+  {}
+#define DEOPTIMIZE_ALOT                                                        \
+  {}
+
+#endif
+
+// Class NativeArguments is used to access arguments passed in from
+// generated dart code to a runtime function or a dart library native
+// function. It is also used to set the return value if any at the slot
+// reserved for return values.
+// All runtime function/dart library native functions have the
+// following signature:
+//   void function_name(NativeArguments arguments);
+// Inside the function, arguments are accessed as follows:
+//   const Instance& arg0 = Instance::CheckedHandle(arguments.NativeArgAt(0));
+//   const Smi& arg1 = Smi::CheckedHandle(arguments.NativeArgAt(1));
+// If the function is generic, type arguments are accessed as follows:
+//   const TypeArguments& type_args =
+//       TypeArguments::Handle(arguments.NativeTypeArgs());
+// The return value is set as follows:
+//   arguments.SetReturn(result);
+// NOTE: Since we pass 'this' as a pass-by-value argument in the stubs we don't
+// have DISALLOW_COPY_AND_ASSIGN in the class definition and do not make it a
+// subclass of ValueObject.
+class NativeArguments {
+ public:
+  Thread* thread() const { return thread_; }
+
+  // Includes type arguments vector.
+  int ArgCount() const { return ArgcBits::decode(argc_tag_); }
+
+  ObjectPtr ArgAt(int index) const {
+    ASSERT((index >= 0) && (index < ArgCount()));
+    ObjectPtr* arg_ptr = &(argv_[-index]);
+    // Tell MemorySanitizer the ObjectPtr was initialized (by generated code).
+    MSAN_UNPOISON(arg_ptr, kWordSize);
+    return *arg_ptr;
+  }
+
+  void SetArgAt(int index, const Object& value) const {
+    ASSERT(thread_->execution_state() == Thread::kThreadInVM);
+    ASSERT((index >= 0) && (index < ArgCount()));
+    argv_[-index] = value.ptr();
+  }
+
+  // Does not include hidden type arguments vector.
+  int NativeArgCount() const {
+    int function_bits = FunctionBits::decode(argc_tag_);
+    return ArgCount() - NumHiddenArgs(function_bits);
+  }
+
+  ObjectPtr NativeArg0() const {
+    int function_bits = FunctionBits::decode(argc_tag_);
+    return ArgAt(NumHiddenArgs(function_bits));
+  }
+
+  ObjectPtr NativeArgAt(int index) const {
+    ASSERT((index >= 0) && (index < NativeArgCount()));
+    if (index == 0) {
+      return NativeArg0();
+    }
+    int function_bits = FunctionBits::decode(argc_tag_);
+    const int actual_index = index + NumHiddenArgs(function_bits);
+    return ArgAt(actual_index);
+  }
+
+  TypeArgumentsPtr NativeTypeArgs() const {
+    ASSERT(ToGenericFunction());
+    return TypeArguments::RawCast(ArgAt(0));
+  }
+
+  int NativeTypeArgCount() const {
+    if (ToGenericFunction()) {
+      TypeArguments& type_args = TypeArguments::Handle(NativeTypeArgs());
+      if (type_args.IsNull()) {
+        // null vector represents infinite list of dynamics
+        return INT_MAX;
+      }
+      return type_args.Length();
+    }
+    return 0;
+  }
+
+  AbstractTypePtr NativeTypeArgAt(int index) const {
+    ASSERT((index >= 0) && (index < NativeTypeArgCount()));
+    TypeArguments& type_args = TypeArguments::Handle(NativeTypeArgs());
+    if (type_args.IsNull()) {
+      // null vector represents infinite list of dynamics
+      return Type::dynamic_type().ptr();
+    }
+    return type_args.TypeAt(index);
+  }
+
+  void SetReturn(const Object& value) const {
+    ASSERT(thread_->execution_state() == Thread::kThreadInVM);
+    *retval_ = value.ptr();
+  }
+
+  ObjectPtr ReturnValue() const {
+    // Tell MemorySanitizer the retval_ was initialized (by generated code).
+    MSAN_UNPOISON(retval_, kWordSize);
+    return *retval_;
+  }
+
+  static intptr_t thread_offset() {
+    return OFFSET_OF(NativeArguments, thread_);
+  }
+  static intptr_t argc_tag_offset() {
+    return OFFSET_OF(NativeArguments, argc_tag_);
+  }
+  static intptr_t argv_offset() { return OFFSET_OF(NativeArguments, argv_); }
+  static intptr_t retval_offset() {
+    return OFFSET_OF(NativeArguments, retval_);
+  }
+
+  static intptr_t ParameterCountForResolution(const Function& function) {
+    ASSERT(function.is_old_native());
+    ASSERT(!function.IsGenerativeConstructor());  // Not supported.
+    ASSERT(!function.IsClosureFunction());        // Not supported.
+    return function.NumParameters();
+  }
+
+  static int ComputeArgcTag(const Function& function) {
+    ASSERT(function.is_old_native());
+    ASSERT(!function.IsGenerativeConstructor());  // Not supported.
+    ASSERT(!function.IsClosureFunction());        // Not supported.
+    int argc = function.NumParameters();
+    int function_bits = 0;
+    if (function.IsGeneric()) {
+      function_bits |= kGenericFunctionBit;
+      argc++;
+    }
+    int tag = ArgcBits::encode(argc);
+    tag = FunctionBits::update(function_bits, tag);
+    return tag;
+  }
+
+ private:
+  enum {
+    kGenericFunctionBit = 1,
+  };
+  enum ArgcTagBits {
+    kArgcBit = 0,
+    kArgcSize = 24,
+    kFunctionBit = kArgcBit + kArgcSize,
+    kFunctionSize = 1,
+  };
+  class ArgcBits : public BitField<intptr_t, int32_t, kArgcBit, kArgcSize> {};
+  class FunctionBits
+      : public BitField<intptr_t, int, kFunctionBit, kFunctionSize> {};
+  friend class Api;
+  friend class NativeEntry;
+  friend class Simulator;
+
+  // Since this function is passed an ObjectPtr directly, we need to be
+  // exceedingly careful when we use it.  If there are any other side
+  // effects in the statement that may cause GC, it could lead to
+  // bugs.
+  void SetReturnUnsafe(ObjectPtr value) const {
+    ASSERT(thread_->execution_state() == Thread::kThreadInVM);
+    *retval_ = value;
+  }
+
+  // Returns true if the arguments are those of a generic function call.
+  bool ToGenericFunction() const {
+    return (FunctionBits::decode(argc_tag_) & kGenericFunctionBit) != 0;
+  }
+
+  int NumHiddenArgs(int function_bits) const {
+    int num_hidden_args = 0;
+    if ((function_bits & kGenericFunctionBit) == kGenericFunctionBit) {
+      num_hidden_args++;
+    }
+    return num_hidden_args;
+  }
+
+  Thread* thread_;     // Current thread pointer.
+  intptr_t argc_tag_;  // Encodes argument count and invoked native call type.
+  ObjectPtr* argv_;    // Pointer to an array of arguments to runtime call.
+  ObjectPtr* retval_;  // Pointer to the return value area.
+};
+
+}  // namespace dart
+
+#endif  // RUNTIME_VM_NATIVE_ARGUMENTS_H_

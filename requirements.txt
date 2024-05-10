@@ -1,0 +1,2 @@
+SCons==4.7.0
+antlr4-tools==0.2.1

@@ -1,0 +1,97 @@
+/*
+ * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * Contact with ITGSS, 651 N Broad St, Suite 201, in the
+ * city of Middletown, zip code 19709, and county of New Castle, state of Delaware.
+ * or visit www.it-gss.com if you need additional information or have any
+ * questions.
+ *
+ */
+
+#ifndef RUNTIME_VM_COMPILER_BACKEND_FLOW_GRAPH_CHECKER_H_
+#define RUNTIME_VM_COMPILER_BACKEND_FLOW_GRAPH_CHECKER_H_
+
+#include "platform/globals.h"
+
+#if defined(CODE_PRECOMPILED_RUNTIME)
+#error "AOT runtime should not use compiler sources (including header files)"
+#endif  // defined(CODE_PRECOMPILED_RUNTIME)
+
+#if defined(DEBUG)
+
+#include "src/compiler/backend/flow_graph.h"
+#include "src/compiler/backend/il.h"
+
+namespace Code {
+
+// Class responsible for performing sanity checks on the flow graph.
+// The intended use is running the checks after each compiler pass
+// in debug mode in order to detect graph inconsistencies as soon
+// as possible. This way, culprit passes are more easily identified.
+//
+// All important assumptions on the flow graph structure that can be
+// verified in reasonable time should be made explicit in this pass
+// so that we no longer rely on asserts that are dispersed throughout
+// the passes or, worse, unwritten assumptions once agreed upon but
+// so easily forgotten. Since the graph checker runs only in debug
+// mode, it is acceptable to perform slightly elaborate tests.
+class FlowGraphChecker : public FlowGraphVisitor {
+ public:
+  // Constructs graph checker. The checker uses some custom-made
+  // visitation to perform additional checks, and uses the
+  // FlowGraphVisitor structure for anything else.
+  FlowGraphChecker(FlowGraph* flow_graph,
+                   const GrowableArray<const Function*>& inline_id_to_function)
+      : FlowGraphVisitor(flow_graph->preorder()),
+        flow_graph_(flow_graph),
+        inline_id_to_function_(inline_id_to_function),
+        script_(Script::Handle(flow_graph_->zone())),
+        current_block_(nullptr) {}
+
+  // Performs a sanity check on the flow graph.
+  void Check(const char* pass_name);
+
+ private:
+  // Custom-made visitors.
+  void VisitBlocks() override;
+  void VisitInstructions(BlockEntryInstr* block);
+  void VisitInstruction(Instruction* instruction);
+  void VisitDefinition(Definition* def);
+  void VisitUseDef(Instruction* instruction,
+                   Value* use,
+                   intptr_t index,
+                   bool is_env);
+  void VisitDefUse(Definition* def, Value* use, Value* prev, bool is_env);
+
+  // Instruction visitors.
+  void VisitConstant(ConstantInstr* constant) override;
+  void VisitPhi(PhiInstr* phi) override;
+  void VisitGoto(GotoInstr* jmp) override;
+  void VisitIndirectGoto(IndirectGotoInstr* jmp) override;
+  void VisitBranch(BranchInstr* branch) override;
+  void VisitRedefinition(RedefinitionInstr* def) override;
+  void AssertArgumentsInEnv(Definition* call);
+  void VisitClosureCall(ClosureCallInstr* call) override;
+  void VisitStaticCall(StaticCallInstr* call) override;
+  void VisitInstanceCall(InstanceCallInstr* call) override;
+  void VisitPolymorphicInstanceCall(
+      PolymorphicInstanceCallInstr* call) override;
+
+  FlowGraph* const flow_graph_;
+  const GrowableArray<const Function*>& inline_id_to_function_;
+  Script& script_;
+  BlockEntryInstr* current_block_;
+};
+
+}  // namespace dart
+
+#endif  // defined(DEBUG)
+
+#endif  // RUNTIME_VM_COMPILER_BACKEND_FLOW_GRAPH_CHECKER_H_

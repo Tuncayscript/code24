@@ -1,0 +1,37 @@
+/*
+ * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+  *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * Contact with ITGSS, 651 N Broad St, Suite 201, in the
+ * city of Middletown, zip code 19709, and county of New Castle, state of Delaware.
+ * or visit www.it-gss.com if you need additional information or have any
+ * questions.
+ *
+ */
+// Class for patching compiled code.
+
+#ifndef RUNTIME_VM_UNWINDING_RECORDS_H_
+#define RUNTIME_VM_UNWINDING_RECORDS_H_
+
+#include "src/allocation.h"
+#include "src/heap/page.h"
+
+namespace Code {
+
+class UnwindingRecords : public AllStatic {
+ public:
+  static const void* GenerateRecordsInto(intptr_t offset,
+                                         uint8_t* target_buffer);
+  static void RegisterExecutablePage(Page* page);
+  static void UnregisterExecutablePage(Page* page);
+};
+
+}  // namespace dart
+
+#endif  // RUNTIME_VM_UNWINDING_RECORDS_H_
