@@ -14,185 +14,65 @@
  * questions.
  *
  */
+#ifndef JIT_COMPILER_H
+#define JIT_COMPILER_H
 
-#ifndef RUNTIME_VM_COMPILER_JIT_COMPILER_H_
-#define RUNTIME_VM_COMPILER_JIT_COMPILER_H_
+#include "compiler.hpp" // Assuming compiler declarations (e.g., AST nodes)
+#include "llvm_util.h"   // Assuming utility functions for working with LLVM
 
-#include "src/allocation.h"
-#include "src/compiler/api/deopt_id.h"
-#include "src/growable_array.h"
-#include "src/runtime_entry.h"
-#include "src/thread_pool.h"
+#include <llvm/ADT/StringRef.h>
+#include <llvm/ADT/SmallVector.h>
+#include <llvm/Analysis/Passes.h>
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/IR/Function.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/Verifier.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Transforms/Scalar.h>
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/ExecutionEngine/MCJIT.h"
+#include "llvm/ExecutionEngine/SectionMemoryManager.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Scalar/GVN.h"
 
-namespace Code {
+namespace CodeJITCompiler {
 
-// Forward declarations.
-class BackgroundCompilationQueue;
-class Class;
-class Code;
-class CompilationWorkQueue;
-class FlowGraph;
-class Function;
-class IndirectGotoInstr;
-class Library;
-class ParsedFunction;
-class QueueElement;
-class Script;
-class SequenceNode;
+class JITCompiler {
+public:
+  JITCompiler(const std::string& module_name);
 
-class CompilationPipeline : public ZoneAllocated {
- public:
-  static CompilationPipeline* New(Zone* zone, const Function& function);
+  // Compile C++ code (replace with AOT if needed)
+  std::unique_ptr<void (*)(... )> compile(const std::string& code);
 
-  virtual void ParseFunction(ParsedFunction* parsed_function) = 0;
-  virtual FlowGraph* BuildFlowGraph(
-      Zone* zone,
-      ParsedFunction* parsed_function,
-      ZoneGrowableArray<const ICData*>* ic_data_array,
-      intptr_t osr_id,
-      bool optimized) = 0;
-  virtual ~CompilationPipeline() {}
+  // Additional functionalities:
+
+  // Set optimization level (optional)
+  void setOptimizationLevel(llvm::OptimizationLevel level);
+
+  // Get the generated LLVM IR (optional)
+  std::string getLLVMIR() const;
+
+  // Dump the generated machine code (for debugging, optional)
+  void dumpMachineCode(const std::string& filename) const;
+
+private:
+  // Helper functions (implementations assumed in jit_compiler.cpp)
+  bool validateInput(const std::string& code);
+  llvm::ParseResult parseInput(const std::string& code);
+  llvm::Function* buildIR(llvm::ParseResult& parse_result);
+  void performOptimizations(llvm::Function* function);
+  std::unique_ptr<llvm::ExecutionEngine> createExecutionEngine();
+  std::unique_ptr<void (*)(... )> generateMachineCode(llvm::Function* function);
+
+  std::string module_name_;
+  std::unique_ptr<llvm::Module> llvm_module_;
+  std::unique_ptr<llvm::ExecutionEngine> execution_engine_;
+  std::string error_string_;
+  llvm::OptimizationLevel opt_level_; // Optional optimization level
 };
 
-class DartCompilationPipeline : public CompilationPipeline {
- public:
-  void ParseFunction(ParsedFunction* parsed_function) override;
+} // namespace CodeJITCompiler
 
-  FlowGraph* BuildFlowGraph(Zone* zone,
-                            ParsedFunction* parsed_function,
-                            ZoneGrowableArray<const ICData*>* ic_data_array,
-                            intptr_t osr_id,
-                            bool optimized) override;
-};
-
-class IrregexpCompilationPipeline : public CompilationPipeline {
- public:
-  IrregexpCompilationPipeline() : backtrack_goto_(nullptr) {}
-
-  void ParseFunction(ParsedFunction* parsed_function) override;
-
-  FlowGraph* BuildFlowGraph(Zone* zone,
-                            ParsedFunction* parsed_function,
-                            ZoneGrowableArray<const ICData*>* ic_data_array,
-                            intptr_t osr_id,
-                            bool optimized) override;
-
- private:
-  IndirectGotoInstr* backtrack_goto_;
-};
-
-class Compiler : public AllStatic {
- public:
-  static constexpr intptr_t kNoOSRDeoptId = DeoptId::kNone;
-
-  static bool IsBackgroundCompilation();
-  // The result for a function may change if debugging gets turned on/off.
-  static bool CanOptimizeFunction(Thread* thread, const Function& function);
-
-  // Generates code for given function without optimization and sets its code
-  // field.
-  //
-  // Returns the raw code object if compilation succeeds.  Otherwise returns an
-  // ErrorPtr.  Also installs the generated code on the function.
-  static ObjectPtr CompileFunction(Thread* thread, const Function& function);
-
-  // Generates unoptimized code if not present, current code is unchanged.
-  static ErrorPtr EnsureUnoptimizedCode(Thread* thread,
-                                        const Function& function);
-
-  // Generates optimized code for function.
-  //
-  // Returns the code object if compilation succeeds.  Returns an Error if
-  // there is a compilation error.  If optimization fails, but there is no
-  // error, returns null.  Any generated code is installed unless we are in
-  // OSR mode.
-  static ObjectPtr CompileOptimizedFunction(Thread* thread,
-                                            const Function& function,
-                                            intptr_t osr_id = kNoOSRDeoptId);
-
-  // Generates local var descriptors and sets it in 'code'. Do not call if the
-  // local var descriptor already exists.
-  static void ComputeLocalVarDescriptors(const Code& code);
-
-  // Eagerly compiles all functions in a class.
-  //
-  // Returns Error::null() if there is no compilation error.
-  static ErrorPtr CompileAllFunctions(const Class& cls);
-
-  // Notify the compiler that background (optimized) compilation has failed
-  // because the mutator thread changed the state (e.g., deoptimization,
-  // deferred loading). The background compilation may retry to compile
-  // the same function later.
-  static void AbortBackgroundCompilation(intptr_t deopt_id, const char* msg);
-};
-
-// Class to run optimizing compilation in a background thread.
-// Current implementation: one task per isolate, it dies with the owning
-// isolate.
-// No OSR compilation in the background compiler.
-class BackgroundCompiler {
- public:
-  explicit BackgroundCompiler(IsolateGroup* isolate_group);
-  virtual ~BackgroundCompiler();
-
-  static void Stop(IsolateGroup* isolate_group) {
-    isolate_group->background_compiler()->Stop();
-  }
-
-  // Enqueues a function to be compiled in the background.
-  //
-  // Return `true` if successful.
-  bool EnqueueCompilation(const Function& function);
-
-  void VisitPointers(ObjectPointerVisitor* visitor);
-
-  BackgroundCompilationQueue* function_queue() const { return function_queue_; }
-  bool is_running() const { return running_; }
-
-  void Run();
-
- private:
-  friend class NoBackgroundCompilerScope;
-
-  void Stop();
-  void StopLocked(Thread* thread, SafepointMonitorLocker* done_locker);
-  void Enable();
-  void Disable();
-  bool IsRunning() { return !done_; }
-
-  IsolateGroup* isolate_group_;
-
-  Monitor monitor_;  // Controls access to the queue and running state.
-  BackgroundCompilationQueue* function_queue_;
-  bool running_;  // While true, will try to read queue and compile.
-  bool done_;     // True if the thread is done.
-  int16_t disabled_depth_;
-
-  DISALLOW_IMPLICIT_CONSTRUCTORS(BackgroundCompiler);
-};
-
-class NoBackgroundCompilerScope : public StackResource {
- public:
-  explicit NoBackgroundCompilerScope(Thread* thread)
-      : StackResource(thread), isolate_group_(thread->isolate_group()) {
-#if defined(CODE_PRECOMPILED_RUNTIME)
-    UNREACHABLE();
-#else
-    isolate_group_->background_compiler()->Disable();
-#endif
-  }
-  ~NoBackgroundCompilerScope() {
-#if defined(CODE_PRECOMPILED_RUNTIME)
-    UNREACHABLE();
-#else
-    isolate_group_->background_compiler()->Enable();
-#endif
-  }
-
- private:
-  IsolateGroup* isolate_group_;
-};
-
-}  // namespace dart
-
-#endif  // RUNTIME_VM_COMPILER_JIT_COMPILER_H_
+#endif // JIT_COMPILER_H
