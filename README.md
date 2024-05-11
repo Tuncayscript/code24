@@ -3,11 +3,11 @@
 Code is an innovative programming language that combines the efficiency and speed of Go with the elegance and practicality of Visual Basic. It's designed to be fast, safe, and suitable for both systems programming and rapid application development.
 
 ```main.code
-imports Language ' In New Version, STDlib planned will be built in
+imports Language
 
 namespace Geometry
 
-    public class Circle
+    hybrid class Circle
         public property Radius as single
     end class
 
