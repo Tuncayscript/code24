@@ -1,61 +1,84 @@
-#include <llvm/IR/Module.h>
-#include <llvm/IR/IRBuilder.h>
-// Other necessary LLVM headers (e.g., Function, Type)
-
-// ... (Front-end logic for parsing and converting to LLVM IR)
+#include "aot_compiler.h"
 
 namespace CodeAOTCompiler {
 
-class AOTCompiler {
-public:
-  // Constructor that initializes the compiler with the source code.
-  AOTCompiler(const std::string& source_code)
-      : module_(new llvm::Module("aot_module", llvm::getGlobalContext())),
-        builder_(llvm::getGlobalContext()) {
-    // ... (initialize front-end data structures and methods)
+AOTCompiler::AOTCompiler(const std::string& source_code)
+    : source_code_(source_code), module_(new llvm::Module("aot_module", llvm::getGlobalContext())),
+      builder_(llvm::getGlobalContext()) {}
+
+AOTCompiler::~AOTCompiler() = default;
+
+std::unique_ptr<llvm::Module> AOTCompiler::Compile() {
+  // Try parsing with Clang first (recommended)
+  if (parseSourceWithClang()) {
+    // Success! Perform optimizations and verification
+    performOptimizationsAndVerification();
+    return module_.release();
   }
 
-  // Destructor to clean up resources.
-  ~AOTCompiler() {
-    // ... (clean up resources)
-  }
+  // If Clang parsing fails (optional):
+  // Consider using your custom Tuncayscript parser here
+  // - Implement IR generation logic based on the custom AST/IR
+  //   (Replace the comment below with your custom parsing and IR generation)
+  // // TODO: Implement custom Tuncayscript parsing and IR generation
 
-  // Compiles the source code into an LLVM module.
-  std::unique_ptr<llvm::Module> Compile() {
-    // Parse the source code using your front-end logic.
-    // This should generate an abstract syntax tree (AST) or some intermediate representation.
-
-    // // Implement the compilation logic
-    // 1. Translate the AST (or intermediate representation) to LLVM IR.
-    //    - Use builder_ to create functions, basic blocks, instructions, etc.
-    //    - Consider data types, function signatures, and control flow during translation.
-    // 2. Integrate LLVM optimization passes (optional).
-    //    - Use `llvm::legacy::PassManager` or newer mechanisms for optimization.
-    // 3. Finalize the module (optional).
-    //    - Perform any final steps like data layout or symbol resolution.
-
-    return module_.release(); // Transfer ownership of the module.
-  }
-
-private:
-  std::unique_ptr<llvm::Module> module_; // The LLVM module being built.
-  llvm::IRBuilder<> builder_;           // Helper for building IR.
-  // ... (other front-end data structures and methods)
-};
-
-} // namespace aot
-
-int main(int argc, char* argv[]) {
-  // ... (error handling, read source code, create compiler)
-
-  std::unique_ptr<llvm::Module> module(compiler.Compile());
-
-  // ... (check compilation success)
-
-  // Output the generated module (e.g., write to file, pass to jit)
-  if (module) {
-    // ... (module output logic)
-  }
-
-  return 0;
+  return nullptr; // Indicate compilation failure
 }
+
+bool AOTCompiler::parseSourceWithClang() {
+  MyASTConsumer consumer;
+  clang::CompilerInstance instance;
+  instance.setASTConsumer(&consumer);
+  instance.getDiagnostics().setDiagnosticOptions(clang::DiagnosticOptions());
+  instance.getTargetOpts().Triple = llvm::sys::getDefaultTargetTriple();
+
+  llvm::MemoryBuffer *buffer = llvm::MemoryBuffer::getMemBuffer(source_code_);
+  // Adjust language options based on Tuncayscript syntax (if necessary)
+  instance.getLangOpts().CPlusPlus = true; // Assuming some C++ compatibility
+  // You might need to modify these options based on Tuncayscript's syntax
+  instance.getLangOpts().// ... (Add specific language options for Tuncayscript)
+
+  if (!instance.createDiagnostics(nullptr, true)) {
+    return false;
+  }
+
+  const clang::FileSystemOptions& fso = instance.getFileManager().getFileSystemOpts();
+  clang::FileManager virtual_fs(fso);
+  const clang::VirtualFileSystem *vfs = virtual_fs.createVirtualFileSystem();
+  instance.setVirtualFileSystem(vfs);
+  instance.getDiagnostics().getClient()->setTarget(vfs);
+
+  clang::UniqueVirtualFileOverlay content(buffer, instance.getVirtualFileSystem());
+  clang::FileEntry *file = virtual_fs.addFile("source.tuncayscript", clang::FileEntryKind::RegularFile, content);
+  instance.getSourceManager().setMainFileID(instance.getSourceManager().createFileID(file));
+  instance.getASTContext().setLangOpts(instance.getLangOpts());
+
+  if (!clang::ParseAST(instance, instance.getSourceManager().getMainFileID(), nullptr)) {
+    error_ = consumer.getError();
+    return false;
+  }
+
+  instance.getDiagnostics().getClient()->flushDiagnostics();
+  vfs->releaseOverlay(content);
+  instance.getVirtualFileSystem()->~VirtualFileSystem();
+  delete buffer;
+
+  // Implement IR generation logic based on the Clang AST (replace with your logic)
+  //   - ... (Traverse the Clang AST and generate corresponding LLVM IR) ...
+
+  return true;
+}
+
+void AOTCompiler::performOptimizationsAndVerification() {
+  llvm::legacy::FunctionPassManager pm(llvm::getGlobalContext());
+  pm.addPass(llvm::createFunctionInliningPass());
+  pm.addPass(llvm::createInstructionCombiningPass());
+  pm.run(*module_);
+
+  if (llvm::verifyModule(*module_, &llvm::errs())) {
+    // Handle verification errors (e.g., throw exception or log error)
+    return; // Indicate compilation failure
+  }
+}
+
+} // namespace CodeAOTCompiler
