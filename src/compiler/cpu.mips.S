@@ -1,4 +1,4 @@
- Copyright (c) 2023, ITGSS Corporation. All rights reserved.
+; Copyright (c) 2023, ITGSS Corporation. All rights reserved.
 ; DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
 ;
 ; This code is distributed in the hope that it will be useful, but WITHOUT
