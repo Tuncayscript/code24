@@ -15,107 +15,152 @@
  *
  */
 
-#include "compiler.hpp"
-#include "llvm_util.h"
-#include "codegen/jit_codegen.cpp"
+#include "jit_compiler.h"
 
 #include <llvm/ADT/StringRef.h>
-#include <llvm/ADT/SmallVector.h>
-#include <llvm/Analysis/Passes.h>
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Function.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Verifier.h>
-#include <llvm/Support/TargetSelect.h>
-#include <llvm/Transforms/Scalar.h>
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/Target/TargetMachine.h"
-#include "llvm/ExecutionEngine/MCJIT.h"
-#include "llvm/ExecutionEngine/SectionMemoryManager.h"
-#include "llvm/Transforms/Scalar.h"
-#include "llvm/Transforms/Scalar/GVN.h"
+#include <llvm/Support/raw_ostream.h>
+#include <clang/AST/ASTConsumer.h>
+#include <clang/AST/ASTContext.h>
+#include <clang/Basic/DiagnosticOptions.h>
+#include <clang/Basic/FileManager.h>
+#include <clang/Driver/Compilation.h>
+#include <clang/Frontend/CompilerInstance.h>
+#include <clang/Frontend/FrontendAction.h>
+#include <clang/Frontend/ParseAST.h>
+#include <clang/Lex/Lexer.h>
 
 namespace CodeJITCompiler {
 
+// Helper class for error handling during parsing
+class MyASTConsumer : public clang::ASTConsumer {
+public:
+  void HandleDiagnostic(unsigned int, const clang::SourceLocation&, const std::string& message) override {
+    error_ += message;
+  }
+
+  std::string getError() const { return error_; }
+
+private:
+  std::string error_;
+};
+
 JITCompiler::JITCompiler(const std::string& module_name)
-  : module_name_(module_name), llvm_module_(new llvm::Module(module_name, llvm::getGlobalContext())) {}
-
-std::unique_ptr<void (*)(... )> JITCompiler::compile(const std::string& code) {
-  if (!validateInput(code)) {
-    // Handle invalid input (throw an exception, log an error)
-    return nullptr;
-  }
-
-  llvm::ParseResult parse_result = parseInput(code);
-  if (parse_result.hasBitcodeReaderError()) {
-    // Handle parsing errors (throw an exception, log an error)
-    return nullptr;
-  }
-
-  auto function = buildIR(parse_result);
-  if (!function) {
-    return nullptr; // Handle function extraction or verification errors
-  }
-
-  performOptimizations(function);
-  execution_engine_ = createExecutionEngine();
-  return generateMachineCode(function);
-}
-
-// Implementations of helper functions
+    : module_name_(module_name), llvm_module_(new llvm::Module(module_name, llvm::getGlobalContext())) {}
 
 bool JITCompiler::validateInput(const std::string& code) {
-  // Implement security-focused validation on the C++ code snippet
-  // (e.g., whitelist allowed patterns, basic syntax checks)
-  return true; // Placeholder, replace with actual validation logic
+  // Implement basic security checks on the code (e.g., whitelist allowed constructs)
+  // TODO: Replace this with your security validation logic
+  return true;
 }
 
 llvm::ParseResult JITCompiler::parseInput(const std::string& code) {
-  // Use a C++ parser (e.g., Clang) to convert code to LLVM IR
-  // Return the ParseResult object indicating success or failure
   llvm::SMDiagnosticError error;
   llvm::StringRef code_str(code);
-  return llvm::parseAssemblyString(code_str, error);
+
+  // Use Clang for C++ code parsing
+  clang::CompilerInstance instance;
+  MyASTConsumer consumer;
+  instance.setASTConsumer(&consumer);
+  instance.getDiagnostics().setDiagnosticOptions(clang::DiagnosticOptions());
+  instance.getTargetOpts().Triple = llvm::sys::getDefaultTargetTriple();
+
+  llvm::MemoryBuffer *buffer = llvm::MemoryBuffer::getMemBuffer(code_str);
+  instance.getLangOpts().CPlusPlus = true;
+  if (!instance.createDiagnostics(nullptr, true)) {
+    return llvm::ParseResult();
+  }
+
+  const clang::FileSystemOptions& fso = instance.getFileManager().getFileSystemOpts();
+  clang::FileManager virtual_fs(fso);
+  const clang::VirtualFileSystem *vfs = virtual_fs.createVirtualFileSystem();
+  instance.setVirtualFileSystem(vfs);
+  instance.getDiagnostics().getClient()->setTarget(vfs);
+
+  clang::UniqueVirtualFileOverlay content(buffer, instance.getVirtualFileSystem());
+  clang::FileEntry *file = virtual_fs.addFile("source.cpp", clang::FileEntryKind::RegularFile, content);
+  instance.getSourceManager().setMainFileID(instance.getSourceManager().createFileID(file));
+  instance.getASTContext().setLangOpts(instance.getLangOpts());
+
+  if (!clang::ParseAST(instance, instance.getSourceManager().getMainFileID(), nullptr)) {
+    error = llvm::ParseResult(consumer.getError());
+  }
+
+  instance.getDiagnostics().getClient()->flushDiagnostics();
+  vfs->releaseOverlay(content);
+  instance.getVirtualFileSystem()->~VirtualFileSystem();
+  delete buffer;
+
+  return error;
 }
 
 llvm::Function* JITCompiler::buildIR(llvm::ParseResult& parse_result) {
   if (parse_result.hasBitcodeReaderError()) {
-    return nullptr; // Handle parsing errors
+    return nullptr;
   }
 
-  auto module = parse_result.getModulePtr();
-
-  // Extract the desired function by name (assuming a single function)
-  const std::string expected_function_name = "your_function_name"; // Replace with actual function name
-  auto function = module->getFunction(expected_function_name);
+  // Extract the desired function by name (replace with actual function name)
+  const std::string expected_function_name = "your_function_name";
+  auto function = llvm_module_->getFunction(expected_function_name);
   if (!function) {
-    return nullptr; // Handle missing function
+    return nullptr;
   }
 
   // Verify the generated IR for well-formedness
-  if (llvm::verifyModule(*module, &llvm::errs())) {
-    return nullptr; // Handle verification errors
+  if (llvm::verifyModule(*llvm_module_, &llvm::errs())) {
+    return nullptr;
   }
 
   return function;
 }
 
-void JITCompiler::performOptimizations(llvm::Function* function) {
-  // Create a pass manager and add basic optimization passes
-  llvm::legacy::FunctionPassManager pm(module_getGlobalContext());
-  pm.addPass(llvm::createFunctionInliningPass());
-  pm.addPass(llvm::createInstructionCombiningPass());
-  pm.addPass(llvm::createDeadCodeEliminationPass());
-  pm.addPass(llvm::createConstantPropagationPass());
-  // ... (consider adding more optimizations if needed)
+void JITCompiler::performOptimizations(llvm::Function* function, llvm::OptimizationLevel opt_level) {
+  // Create a pass manager
+  llvm::legacy::FunctionPassManager pm(llvm::getGlobalContext());
+
+  // Add basic optimization passes based on the level
+  switch (opt_level) {
+    case llvm::OptimizationLevel::O0:
+      // No optimizations
+      break;
+    case llvm::OptimizationLevel::O1:
+      // Common optimizations (e.g., function inlining, dead code elimination)
+      pm.addPass(llvm::createFunctionInliningPass());
+      pm.addPass(llvm::createInstructionCombiningPass());
+      pm.addPass(llvm::createDeadCodeEliminationPass());
+      break;
+    case llvm::OptimizationLevel::O2:
+      // More aggressive optimizations (e.g., constant propagation, loop optimizations)
+      pm.addPass(llvm::createFunctionInliningPass());
+      pm.addPass(llvm::createInstructionCombiningPass());
+      pm.addPass(llvm::createDeadCodeEliminationPass());
+      pm.addPass(llvm::createConstantPropagationPass());
+      // ... (consider adding more optimizations)
+      break;
+    case llvm::OptimizationLevel::O3:
+      // Highest optimization level (may take longer)
+      pm.addPass(llvm::createFunctionInliningPass());
+      pm.addPass(llvm::createInstructionCombiningPass());
+      pm.addPass(llvm::createDeadCodeEliminationPass());
+      pm.addPass(llvm::createConstantPropagationPass());
+      // ... (consider adding vectorization and other advanced optimizations)
+      break;
+    default:
+      // Handle invalid optimization level
+      break;
+  }
 
   // Run the pass manager on the function
   pm.run(*function);
 }
 
 std::unique_ptr<llvm::ExecutionEngine> JITCompiler::createExecutionEngine() {
-  // Configure target selection and create an ExecutionEngine
+  // Configure target selection and create an Execution Engine
   llvm::EngineBuilder builder(std::unique_ptr<llvm::Module>(module_->clone()));
   builder.setErrorStr(&error_string_);
   std::unique_ptr<llvm::ExecutionEngine> engine = std::move(builder.create());
@@ -144,3 +189,20 @@ std::unique_ptr<void (*)(... )> JITCompiler::generateMachineCode(llvm::Function*
   // Return the function pointer cast to the appropriate type
   return std::unique_ptr<void (*)(... )>(reinterpret_cast<void (*)(... )>(error_or_fptr.get()));
 }
+
+std::string JITCompiler::getLLVMIR() const {
+  std::string error_info;
+  llvm::raw_string_ostream stream(error_info);
+  llvm_module_->print(stream, nullptr);
+  return stream.str();
+}
+
+void JITCompiler::dumpMachineCode(const std::string& filename) const {
+  if (!execution_engine_) {
+    return; // Handle missing engine
+  }
+  execution_engine_->dumpFunction(llvm_module_->getFunctionList().front(), filename);
+}
+
+} // namespace CodeJITCompiler
+
