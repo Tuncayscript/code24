@@ -21,6 +21,8 @@
 #include "platform/allocation.h"
 #include "platform/assert.h"
 #include "src/globals.h"
+#include "runtime/Foundation/Foundation.hpp"
+#include "runtime/zalloc.hpp"
 
 namespace Code {
 
