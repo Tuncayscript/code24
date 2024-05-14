@@ -62,6 +62,7 @@ end module
 * C/C++20 - The main programming language used
 * ANTLR - Used to generate language recognition components
 * LLVM - For constructing compiler
+* Zig - Getting Support of LLVM
 * CMake - A software construction tool
 
 
