@@ -65,7 +65,7 @@ end module
 * CMake - A software construction tool
 
 
-## Authors
+## People behind the Code
 * Tunjay Akbarli (Me) - Initial work - tunjayakbarli@it-gss.com
 * Tural Guliyev - Cross-Compilations - turalquliyev@it-gss.com
 * Teymur Novruzov - Lead Architect - teymurnovruzov@it-gss.com
