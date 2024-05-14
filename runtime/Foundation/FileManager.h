@@ -18,8 +18,6 @@
 // Date: Sunday, May 12, 2024
 // Technology: C++20 - ISO/IEC 14882:2020(E) 
 
-
-
 <chapter>
   <heading>File management</heading>
   <section>
@@ -34,7 +32,7 @@
     In the default mode of operation the system is very tolerant
     of paths and allows you to work with both unix and windows
     style paths.  The consequences of this are apparent in the 
-    path handling methods of [NSString] rather than in [NSFileManager].
+    path handling methods of [String] rather than in [NSFileManager].
     </p>
     <subsect>
       <heading>unix</heading>
@@ -175,8 +173,8 @@
 extern "C" {
 #endif
 
-@class NSNumber;
-@class NSString;
+@class Number;
+@class String;
 @class NSData;
 @class NSDate;
 @class NSArray;
@@ -239,7 +237,7 @@ GS_EXPORT_CLASS
 #endif
 
 
-- (NSDictionary *) attributesOfItemAtPath: (NSString*)path
+- (NSDictionary *) attributesOfItemAtPath: (String*)path
 				    error: (NSError**)error;
 
 /**
@@ -249,8 +247,8 @@ GS_EXPORT_CLASS
  * Errors are returned in the error variable.
  * Returns YES on success, NO otherwise.
  */
-- (BOOL) copyItemAtPath: (NSString*)src
-		 toPath: (NSString*)dst
+- (BOOL) copyItemAtPath: (String*)src
+		 toPath: (String*)dst
 		  error: (NSError**)error;
 /**
  * Moves a file or directory specified by src to 
@@ -258,8 +256,8 @@ GS_EXPORT_CLASS
  * returned in error.<br />
  * Returns YES on success, NO otherwise.
  */
-- (BOOL) moveItemAtPath: (NSString*)src
-		 toPath: (NSString*)dst
+- (BOOL) moveItemAtPath: (String*)src
+		 toPath: (String*)dst
 		  error: (NSError**)error;
 
 /**
@@ -268,7 +266,7 @@ GS_EXPORT_CLASS
  * the directory is deleted recursively.<br />
  * Returns YES on success, otherwise NO.
  */
-- (BOOL) removeItemAtPath: (NSString*)path
+- (BOOL) removeItemAtPath: (String*)path
                     error: (NSError**)error;
 
 /**
@@ -304,11 +302,11 @@ GS_EXPORT_CLASS
  * that point to the destination path.<br />
  * Returns YES on success, otherwise NO.
  */
-- (BOOL) createSymbolicLinkAtPath: (NSString*)path
-              withDestinationPath: (NSString*)destPath
+- (BOOL) createSymbolicLinkAtPath: (String*)path
+              withDestinationPath: (String*)destPath
                             error: (NSError**)error;
 
-- (BOOL) setAttributes:(NSDictionary *)attributes ofItemAtPath:(NSString *)path error:(NSError **)error;
+- (BOOL) setAttributes:(NSDictionary *)attributes ofItemAtPath:(String *)path error:(NSError **)error;
 #endif
 
 /**
@@ -318,13 +316,13 @@ GS_EXPORT_CLASS
  * directory for other file manager instances will also be changed
  * by this method.
  */
-- (BOOL) changeCurrentDirectoryPath: (NSString*)path;
+- (BOOL) changeCurrentDirectoryPath: (String*)path;
 - (BOOL) changeFileAttributes: (NSDictionary*)attributes
-		       atPath: (NSString*)path;
-- (NSArray*) componentsToDisplayForPath: (NSString*)path;
-- (NSData*) contentsAtPath: (NSString*)path;
-- (BOOL) contentsEqualAtPath: (NSString*)path1
-		     andPath: (NSString*)path2;
+		       atPath: (String*)path;
+- (NSArray*) componentsToDisplayForPath: (String*)path;
+- (NSData*) contentsAtPath: (String*)path;
+- (BOOL) contentsEqualAtPath: (String*)path1
+		     andPath: (String*)path2;
 
 
 /**
@@ -362,23 +360,23 @@ GS_EXPORT_CLASS
   
 
 /**
- * Returns an array of NSStrings of the contents of the
+ * Returns an array of Strings of the contents of the
  * specified directory.<br />
  * The listing does <strong>not</strong> recursively list subdirectories.<br />
  * The special files '.' and '..' are not listed.<br />
  * Indicates an error by returning nil (eg. if path is not a directory or
  * it can't be read for some reason).
  */
-- (NSArray*) contentsOfDirectoryAtPath: (NSString*)path error: (NSError**)error;
+- (NSArray*) contentsOfDirectoryAtPath: (String*)path error: (NSError**)error;
 
-- (NSDictionary*) attributesOfFileSystemForPath: (NSString*)path
+- (NSDictionary*) attributesOfFileSystemForPath: (String*)path
                                           error: (NSError**)error;
 #endif
 
-- (BOOL) copyPath: (NSString*)source
-	   toPath: (NSString*)destination
+- (BOOL) copyPath: (String*)source
+	   toPath: (String*)destination
 	  handler: (id)handler;
-- (BOOL) createDirectoryAtPath: (NSString *)path
+- (BOOL) createDirectoryAtPath: (String *)path
    withIntermediateDirectories: (BOOL)flag
 		    attributes: (NSDictionary *)attributes
                          error: (NSError **) error;
@@ -386,16 +384,16 @@ GS_EXPORT_CLASS
   withIntermediateDirectories: (BOOL)flag
 		   attributes: (NSDictionary *)attributes
                         error: (NSError **) error;
-- (BOOL) createDirectoryAtPath: (NSString*)path
+- (BOOL) createDirectoryAtPath: (String*)path
 		    attributes: (NSDictionary*)attributes;
-- (BOOL) createFileAtPath: (NSString*)path
+- (BOOL) createFileAtPath: (String*)path
 		 contents: (NSData*)contents
 	       attributes: (NSDictionary*)attributes;
-- (BOOL) createSymbolicLinkAtPath: (NSString*)path
-		      pathContent: (NSString*)otherPath;
-- (NSString*) currentDirectoryPath;
-- (NSArray*) directoryContentsAtPath: (NSString*)path;
-- (NSString*) displayNameAtPath: (NSString*)path;
+- (BOOL) createSymbolicLinkAtPath: (String*)path
+		      pathContent: (String*)otherPath;
+- (String*) currentDirectoryPath;
+- (NSArray*) directoryContentsAtPath: (String*)path;
+- (String*) displayNameAtPath: (String*)path;
 /**
  * <p>Returns an enumerator which can be used to return each item with
  * the directory at path in turn.
@@ -407,19 +405,19 @@ GS_EXPORT_CLASS
  * filesystem is used.
  * </p>
  */
-- (NSDirectoryEnumerator*) enumeratorAtPath: (NSString*)path;
+- (NSDirectoryEnumerator*) enumeratorAtPath: (String*)path;
 
 /** Returns the attributes dictionary for the file at the specified path.
  * If that file is a symbolic link, the flag determines whether the attributes
  * returned are those of the link or those of the destination file.
  */
-- (NSDictionary*) fileAttributesAtPath: (NSString*)path
+- (NSDictionary*) fileAttributesAtPath: (String*)path
 			  traverseLink: (BOOL)flag;
 
 /**
  * Returns YES if a file (or directory etc) exists at the specified path.
  */
-- (BOOL) fileExistsAtPath: (NSString*)path;
+- (BOOL) fileExistsAtPath: (String*)path;
 
 /**
  * Returns YES if a file (or directory etc) exists at the specified path.<br />
@@ -427,8 +425,8 @@ GS_EXPORT_CLASS
  * in the location it points to, indicating whether the file is a
  * directory or not.<br />
  */
-- (BOOL) fileExistsAtPath: (NSString*)path isDirectory: (BOOL*)isDirectory;
-- (NSDictionary*) fileSystemAttributesAtPath: (NSString*)path;
+- (BOOL) fileExistsAtPath: (String*)path isDirectory: (BOOL*)isDirectory;
+- (NSDictionary*) fileSystemAttributesAtPath: (String*)path;
 
 /**
  * Convert from OpenStep internal string format to a string in
@@ -441,19 +439,19 @@ GS_EXPORT_CLASS
  * work with unicode strings.<br />
  * Raises an exception if the character conversion is not possible.
  */
-- (const GSNativeChar*) fileSystemRepresentationWithPath: (NSString*)path;
+- (const GSNativeChar*) fileSystemRepresentationWithPath: (String*)path;
 
-- (BOOL) isExecutableFileAtPath: (NSString*)path;
-- (BOOL) isDeletableFileAtPath: (NSString*)path;
-- (BOOL) isReadableFileAtPath: (NSString*)path;
-- (BOOL) isWritableFileAtPath: (NSString*)path;
-- (BOOL) linkPath: (NSString*)source
-	   toPath: (NSString*)destination
+- (BOOL) isExecutableFileAtPath: (String*)path;
+- (BOOL) isDeletableFileAtPath: (String*)path;
+- (BOOL) isReadableFileAtPath: (String*)path;
+- (BOOL) isWritableFileAtPath: (String*)path;
+- (BOOL) linkPath: (String*)source
+	   toPath: (String*)destination
 	  handler: (id)handler;
-- (BOOL) movePath: (NSString*)source
-	   toPath: (NSString*)destination 
+- (BOOL) movePath: (String*)source
+	   toPath: (String*)destination 
 	  handler: (id)handler;
-- (NSString*) pathContentOfSymbolicLinkAtPath: (NSString*)path;
+- (String*) pathContentOfSymbolicLinkAtPath: (String*)path;
 
 /**
  * Removes the file or directory at path, using a
@@ -462,7 +460,7 @@ GS_EXPORT_CLASS
  * [NSObject(NSFileManagerHandler)-fileManager:shouldProceedAfterError:]
  * messages.
  */
-- (BOOL) removeFileAtPath: (NSString*)path
+- (BOOL) removeFileAtPath: (String*)path
 		  handler: (id)handler;
 
 /**
@@ -471,16 +469,16 @@ GS_EXPORT_CLASS
  * This representation may vary between filesystems.<br />
  * The GNUstep version of this method currently does not bother to change
  * any path separator and extension characters to the standard values
- * ('/' and '.' respectively) as the path handling methods of [NSString]
+ * ('/' and '.' respectively) as the path handling methods of [String]
  * should be able to handle native format strings.<br />
  * On mingw32 systems, the filesystem representation is 16-bit unicode and
  * is expected to have come from the variant of a system call which works
  * with unicode strings.
  */
-- (NSString*) stringWithFileSystemRepresentation: (const GSNativeChar*)string
+- (String*) stringWithFileSystemRepresentation: (const GSNativeChar*)string
 					  length: (NSUInteger)len;
 
-- (NSArray*) subpathsAtPath: (NSString*)path;
+- (NSArray*) subpathsAtPath: (String*)path;
 
 @end /* NSFileManager */
 
@@ -538,7 +536,7 @@ GS_EXPORT_CLASS
  * error, to decide whether processing should proceed after the error.
  */
 - (void) fileManager: (NSFileManager*)fileManager
-     willProcessPath: (NSString*)path;
+     willProcessPath: (String*)path;
 @end
 
 /**
@@ -560,8 +558,8 @@ GS_EXPORT_CLASS
 #if	GS_EXPOSE(NSDirectoryEnumerator)
 @private
   void *_stack; /* GSIArray */
-  NSString *_topPath;
-  NSString *_currentFilePath;
+  String *_topPath;
+  String *_currentFilePath;
   NSFileManager *_mgr;
   GSDirEnumErrorHandler _errorHandler; 
   struct _NSDirectoryEnumeratorFlags      // tag for objc++ w/gcc 4.6 
@@ -591,100 +589,100 @@ GS_EXPORT_CLASS
 /* File Attributes */
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileAppendOnly;
+GS_EXPORT String* const NSFileAppendOnly;
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileCreationDate;
+GS_EXPORT String* const NSFileCreationDate;
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileDeviceIdentifier;
+GS_EXPORT String* const NSFileDeviceIdentifier;
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileExtensionHidden;
+GS_EXPORT String* const NSFileExtensionHidden;
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileGroupOwnerAccountID;
+GS_EXPORT String* const NSFileGroupOwnerAccountID;
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileGroupOwnerAccountName;
+GS_EXPORT String* const NSFileGroupOwnerAccountName;
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileHFSCreatorCode;
+GS_EXPORT String* const NSFileHFSCreatorCode;
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileHFSTypeCode;
+GS_EXPORT String* const NSFileHFSTypeCode;
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileImmutable;
+GS_EXPORT String* const NSFileImmutable;
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileModificationDate;
+GS_EXPORT String* const NSFileModificationDate;
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileOwnerAccountID;
+GS_EXPORT String* const NSFileOwnerAccountID;
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileOwnerAccountName;
+GS_EXPORT String* const NSFileOwnerAccountName;
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFilePosixPermissions;
+GS_EXPORT String* const NSFilePosixPermissions;
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileReferenceCount;
+GS_EXPORT String* const NSFileReferenceCount;
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileSize;
+GS_EXPORT String* const NSFileSize;
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileSystemFileNumber;
+GS_EXPORT String* const NSFileSystemFileNumber;
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileSystemNumber;
+GS_EXPORT String* const NSFileSystemNumber;
 /** File attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileType;
+GS_EXPORT String* const NSFileType;
 
 /* File Types */
 
 /** Possible value for '<code>NSFileType</code>' key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileTypeDirectory;
+GS_EXPORT String* const NSFileTypeDirectory;
 /** Possible value for '<code>NSFileType</code>' key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileTypeRegular;
+GS_EXPORT String* const NSFileTypeRegular;
 /** Possible value for '<code>NSFileType</code>' key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileTypeSymbolicLink;
+GS_EXPORT String* const NSFileTypeSymbolicLink;
 /** Possible value for '<code>NSFileType</code>' key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileTypeSocket;
+GS_EXPORT String* const NSFileTypeSocket;
 /** Possible value for '<code>NSFileType</code>' key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileTypeFifo;
+GS_EXPORT String* const NSFileTypeFifo;
 /** Possible value for '<code>NSFileType</code>' key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileTypeCharacterSpecial;
+GS_EXPORT String* const NSFileTypeCharacterSpecial;
 /** Possible value for '<code>NSFileType</code>' key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileTypeBlockSpecial;
+GS_EXPORT String* const NSFileTypeBlockSpecial;
 /** Possible value for '<code>NSFileType</code>' key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileTypeUnknown;
+GS_EXPORT String* const NSFileTypeUnknown;
 
 /* FileSystem Attributes */
 
 /** File system attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileSystemSize;
+GS_EXPORT String* const NSFileSystemSize;
 /** File system attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileSystemFreeSize;
+GS_EXPORT String* const NSFileSystemFreeSize;
 /** File system attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileSystemNodes;
+GS_EXPORT String* const NSFileSystemNodes;
 /** File system attribute key in dictionary returned by
     [NSFileManager-fileAttributesAtPath:traverseLink:]. */
-GS_EXPORT NSString* const NSFileSystemFreeNodes;
+GS_EXPORT String* const NSFileSystemFreeNodes;
 
 /* Easy access to attributes in a dictionary */
 
@@ -696,11 +694,11 @@ GS_EXPORT NSString* const NSFileSystemFreeNodes;
 - (BOOL) fileIsAppendOnly;
 - (BOOL) fileIsImmutable;
 - (unsigned long long) fileSize;
-- (NSString*) fileType;
-- (NSNumber*) fileOwnerAccountID;
-- (NSString*) fileOwnerAccountName;
-- (NSNumber*) fileGroupOwnerAccountID;
-- (NSString*) fileGroupOwnerAccountName;
+- (String*) fileType;
+- (Number*) fileOwnerAccountID;
+- (String*) fileOwnerAccountName;
+- (Number*) fileGroupOwnerAccountID;
+- (String*) fileGroupOwnerAccountName;
 - (NSDate*) fileModificationDate;
 - (NSUInteger) filePosixPermissions;
 - (NSUInteger) fileSystemNumber;
@@ -717,60 +715,60 @@ GS_EXPORT NSString* const NSFileSystemFreeNodes;
 @interface NSObject (NSFileManagerDelegate)
 #endif
 - (BOOL)fileManager: (NSFileManager *)fileManager
-  shouldCopyItemAtPath: (NSString *)srcPath
-                toPath: (NSString *)dstPath;
+  shouldCopyItemAtPath: (String *)srcPath
+                toPath: (String *)dstPath;
 - (BOOL)fileManager: (NSFileManager *)fileManager
   shouldCopyItemAtURL: (NSURL *)srcURL
                 toURL: (NSURL *)dstURL;
 
 - (BOOL)fileManager: (NSFileManager *)fileManager
   shouldProceedAfterError: (NSError *)error
-        copyingItemAtPath: (NSString *)srcPath
-                   toPath: (NSString *)dstPath;
+        copyingItemAtPath: (String *)srcPath
+                   toPath: (String *)dstPath;
 - (BOOL)fileManager: (NSFileManager *)fileManager
   shouldProceedAfterError: (NSError *)error
          copyingItemAtURL: (NSURL *)srcURL
                     toURL: (NSURL *)dstURL;
 
 - (BOOL)fileManager: (NSFileManager *)fileManager
-  shouldMoveItemAtPath: (NSString *)srcPath
-                toPath: (NSString *)dstPath;
+  shouldMoveItemAtPath: (String *)srcPath
+                toPath: (String *)dstPath;
 - (BOOL)fileManager: (NSFileManager *)fileManager
   shouldMoveItemAtURL: (NSURL *)srcURL
                 toURL: (NSURL *)dstURL;
 
 - (BOOL)fileManager: (NSFileManager *)fileManager
   shouldProceedAfterError: (NSError *)error
-         movingItemAtPath: (NSString *)srcPath
-                   toPath: (NSString *)dstPath;
+         movingItemAtPath: (String *)srcPath
+                   toPath: (String *)dstPath;
 - (BOOL)fileManager: (NSFileManager *)fileManager
   shouldProceedAfterError: (NSError *)error
           movingItemAtURL: (NSURL *)srcURL
                     toURL: (NSURL *)dstURL;
 
 - (BOOL)fileManager: (NSFileManager *)fileManager
-  shouldLinkItemAtPath: (NSString *)srcPath
-                toPath: (NSString *)dstPath;
+  shouldLinkItemAtPath: (String *)srcPath
+                toPath: (String *)dstPath;
 - (BOOL)fileManager: (NSFileManager *)fileManager
   shouldLinkItemAtURL: (NSURL *)srcURL
                 toURL: (NSURL *)dstURL;
 
 - (BOOL)fileManager: (NSFileManager *)fileManager
   shouldProceedAfterError: (NSError *)error
-        linkingItemAtPath: (NSString *)srcPath
-                   toPath: (NSString *)dstPath;
+        linkingItemAtPath: (String *)srcPath
+                   toPath: (String *)dstPath;
 - (BOOL)fileManager: (NSFileManager *)fileManager
   shouldProceedAfterError: (NSError *)error
          linkingItemAtURL: (NSURL *)srcURL
                     toURL: (NSURL *)dstURL;
 
 - (BOOL)fileManager: (NSFileManager *)fileManager
-  shouldRemoveItemAtPath: (NSString *)path;
+  shouldRemoveItemAtPath: (String *)path;
 - (BOOL)fileManager: (NSFileManager *)fileManager
   shouldRemoveItemAtURL: (NSURL *)URL;
 - (BOOL)fileManager: (NSFileManager *)fileManager
   shouldProceedAfterError: (NSError *)error
-       removingItemAtPath: (NSString *)path;
+       removingItemAtPath: (String *)path;
 - (BOOL)fileManager: (NSFileManager *)fileManager
   shouldProceedAfterError: (NSError *)error
         removingItemAtURL: (NSURL *)URL;
