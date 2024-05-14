@@ -13,7 +13,7 @@
  * or visit www.it-gss.com if you need additional information or have any
  * questions.
  *
- */
+*/
 
 /// About:
 /// Filename: clang.zig
