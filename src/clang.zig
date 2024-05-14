@@ -1,4 +1,4 @@
-/**
+/*
  * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -15,11 +15,10 @@
  *
  */
 
-/* About:
-  Filename: clang.zig
- /// Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
-  Date: Tuesday, May 14, 2024
-*/
+/// About:
+/// Filename: clang.zig
+/// Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
+/// Date: Tuesday, May 14, 2024
 
 const std = @import("std");
 pub const builtin = @import("builtin");
