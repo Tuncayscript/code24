@@ -27,11 +27,11 @@
 
 #if defined _CPU_ARM_
 #ifndef __ARM_EABI__
-#  error "the Julia ARM ABI implementation only supports EABI"
+#  error "the Code ARM ABI implementation only supports EABI"
 #endif
 
 #ifndef __ARM_PCS_VFP
-#  error "the Julia ARM ABI implementation requires VFP support"
+#  error "the Code ARM ABI implementation requires VFP support"
 #endif
 #endif
 
