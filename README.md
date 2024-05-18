@@ -2,38 +2,43 @@
 
 Code is an innovative programming language that combines the efficiency and speed of Go with the elegance and practicality of Python. It's designed to be fast, safe, and suitable for both systems programming and rapid application development.
 ```
-imports Language
+module Geometry
 
-namespace Geometry
+export Circle, print_total_area
 
-    hybrid class Circle
-        public property Radius as single
-    end class
+# Define a Circle type with a single field for the radius
+structure Circle
+    radius::Float32
+    pi::Float32
+end
 
-    public module CircleHelpers
-        public procedure PrintTotalArea(circles As List(Of Circle))
-            variable totalArea as single = 0
-            for each circle as Circle in circles
-                totalArea += PI * circle.Radius * circle.Radius
-            next
-            output("Total area: " & totalArea)
-        end procedure
-    end module
+# Define a module with a function to print the total area of a list of circles
+module CircleHelpers
+    export print_total_area
 
-end namespace
+    # Function to calculate and print the total area of a list of circles
+    function print_total_area(circles::Vector{Circle})
+        total_area = 0.0f0
+        for circle in circles
+            total_area += 3.14 * circle.radius^2
+        end
+        println("Total area: ", total_area)
+    end
+end
 
-module Program
-    procedure Main()
-        ' Create a list of Circle instances with different radii
-        variable circles as new List(Of Geometry.Circle) from {
-            new Geometry.Circle with {.Radius = 1.0F},
-            new Geometry.Circle with {.Radius = 2.0F}
-        }
+end # module Geometry
 
-        ' Call the function to print the total area
-        Geometry.CircleHelpers.PrintTotalArea(circles)
-    end procedure
-end module
+# Main program
+function main()
+    # Create a list of Circle instances with different radii
+    circles = [
+        Circle(1.0f0),
+        Circle(2.0f0)
+    ]
+
+    # Call the function to print the total area
+    Geometry.CircleHelpers.print_total_area(circles)
+end
 ```
 ## Killer Features of the Language
 
