@@ -36,12 +36,13 @@
 
 #include <llvm/Target/TargetMachine.h>
 #include "language_assert.h"
-#include "julia.h"
+#include "code.h"
 #include "language_internal.h"
 #include "platform.h"
 #include "llvm-codegen-shared.h"
 #include <stack>
 #include <queue>
+
 
 
 // As of LLVM 13, there are two runtime JIT linker implementations, the older
