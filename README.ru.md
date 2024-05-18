@@ -3,10 +3,11 @@
 ![Github](https://img.shields.io/badge/-Github-0a0a0a?style=for-the-badge&logo=Github)
 ![Maven](https://img.shields.io/badge/-Maven-0a0a0a?style=for-the-badge&logo=ApacheMaven)
 
-### [Russian version](https://github.com/Mark1708/github-maven-package-example/blob/main/README.ru.md)
-You can configure Apache Maven to publish packages to GitHub Packages and to use packages stored on GitHub Packages as dependencies in a Java project.
+### [English version](https://github.com/Mark1708/github-maven-package-example/blob/main/README.md)
 
-## Generate a standard Maven project
+Вы можете настроить Apache Maven для публикации пакетов в GitHub Packages  и их использование в качестве зависимостей в проекте Java.
+
+## Генерируем стандартный Maven проект
 
 ```bash
 mvn archetype:generate -DgroupId=example.com -DartifactId=github-maven-package-example -DarchetypeArtifactId=maven-archetype-quickstart -DarchetypeVersion=1.4 -DinteractiveMode=false
@@ -16,9 +17,9 @@ mvn validate
 mvn clean install
 ```
 
-## Edit pom.xml
+## Редактируем pom.xml
 
-#### Update properties
+#### Изменяем properties
 
 ```xml
 <properties>  
@@ -32,9 +33,9 @@ mvn clean install
   <github.repository.name>GITHUB_REPO</github.repository.name>  
 </properties>
 ```
-> Replacing <GITHUB_USERNAME> and <GITHUB_REPO> with real data
+> Заменяем <GITHUB_USERNAME> и <GITHUB_REPO> на реальные данные
 
-#### Add distributionManagement
+#### Добавляем distributionManagement
 
 ```xml
 <distributionManagement>  
@@ -47,7 +48,7 @@ mvn clean install
 ```
 
 
-#### Update build
+#### Изменяем build
 
 ```xml
 <build>  
@@ -88,7 +89,7 @@ mvn clean install
 </build>
 ```
 
-## Add simple class User
+## Добавляем простой класс User
 
 ```java
 public class User {  
@@ -143,7 +144,7 @@ public class User {
 }
 ```
 
-## Let's make sure we didn't make a mistake and install the packages
+## Убедимся, что не ошиблись и установим пакеты
 
 ```bash
 mvn validate
@@ -151,9 +152,9 @@ mvn validate
 mvn clean install
 ```
 
-## Preparing for deployment
+## Подготовка к деплою
 
-Edit the file `~/.m2/settings.xml ` to prove to Github the seriousness of their intentions)
+Отредактируем файл  `~/.m2/settings.xml` чтобы доказать Github серьёзность своих намериний)
 
 `vim ~/.m2/settings.xml`
 
@@ -196,18 +197,19 @@ Edit the file `~/.m2/settings.xml ` to prove to Github the seriousness of their 
 </settings>
 ```
 
-> Replace <GITHUB_USERNAME>,  <GITHUB_REPO> and <GITHUB_ACCESS_TOKEN> with real data </br>
-> You need an access token to `publish, install, and delete private, internal, and public packages`.
+> Заменяем <GITHUB_USERNAME>,  <GITHUB_REPO> и <GITHUB_ACCESS_TOKEN> </br>
+> Вам нужен токен доступа с правами: `publish, install, and delete private, internal, and public packages`
 
-## Deploy
+## Деплой
 
-Everything is simple here:
+Тут всё просто:
 ```shell
 mvn deploy
 ```
 
-## Result
-In your repository you can find such a charm:
+## Результат
+
+В своём репозитории вы можете найти такую прелесть:
 ```xml
 <dependency>  
   <groupId>example.com</groupId>  
@@ -216,15 +218,16 @@ In your repository you can find such a charm:
 </dependency>
 ```
 
-If the repository is public, then the dependency is available to everyone!
-> But if you did it in private, then on the device where you will use this dependency, you will need to configure the same `~/.m2/settings.xml ` file.
- 
-### Good luck !)
+Если репозиторий публичный, то зависимость доступна всем!
 
-## Other Resources
--   [Boilerplates](https://github.com/Mark1708/boilerplates) - Templates for various projects
--   [Cheat-Sheets](https://github.com/Mark1708/cheat-sheets) - Command Reference for various tools and technologies
--   [Habr](https://habr.com/ru/users/Mark1708/posts) - Here I sometimes write about something interesting
+> Но если вы это делали в приватном, то на устройстве, где вы будете использовать эту зависимость потребуется настроить такой же `~/.m2/settings.xml` файл. 
+ 
+### Удачи !)
+
+## Другие ресурсы
+-   [Boilerplates](https://github.com/Mark1708/boilerplates) - Шаблоны разных проектов
+-   [Cheat-Sheets](https://github.com/Mark1708/cheat-sheets) - Справочник по различным инструментам и технологиям
+-   [Habr](https://habr.com/ru/users/Mark1708/posts) - Здесь я иногда пишу о чем-то интересном
 
 ## Contact
 Created by [Gurianov Mark](https://mark1708.github.io/) - feel free to contact me!
