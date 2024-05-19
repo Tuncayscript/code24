@@ -1,5 +1,4 @@
 ; tree regular expression pattern matching
-; by Jeff Bezanson
 
 ; list of special pattern symbols that cannot be variable names
 (define metasymbols '(_ ...))
