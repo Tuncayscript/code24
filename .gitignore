@@ -1,3 +1,6 @@
+# Code PL file association
+*.code linguist-language=Code
+
 # Prerequisites
 *.d
 
@@ -34,9 +37,6 @@
 # Generated C++ Code
 gen/**
 lib/**
-
-# Code PL file association
-*.code linguist-language=Code
 
 
 # Scons db
