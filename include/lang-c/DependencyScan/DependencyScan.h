@@ -1,20 +1,3 @@
-//===--- DependencyScan.h - C API for Lang Dependency Scanning ---*- C -*-===//
-//
-// This source file is part of the Lang.org open source project
-//
-// Copyright (c) 2014 - 2020 Apple Inc. and the Lang project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See https://lang.org/LICENSE.txt for license information
-// See https://lang.org/CONTRIBUTORS.txt for the list of Lang project authors
-//
-//===----------------------------------------------------------------------===//
-//
-// This C API is primarily intended to serve as the Lang Driver's
-// dependency scanning facility (https://github.com/apple/lang-driver).
-//
-//===----------------------------------------------------------------------===//
-
 #ifndef LANG_C_DEPENDENCY_SCAN_H
 #define LANG_C_DEPENDENCY_SCAN_H
 
