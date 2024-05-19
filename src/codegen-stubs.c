@@ -15,7 +15,7 @@
  */
 
 // This file provides a fallback implementation of the codegen plugin interface,
-// used when libjulia-codegen is not available.
+// used when libcode-codegen is not available.
 
 #include "code.h"
 #include "language_internal.h"
