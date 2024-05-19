@@ -201,21 +201,21 @@ static inline llvm::Instruction *tbaa_decorate(llvm::MDNode *md, llvm::Instructi
 }
 
 // bitcast a value, but preserve its address space when dealing with pointer types
-static inline llvm::Value *emit_bitcast_with_builder(llvm::IRBuilder<> &builder, llvm::Value *v, llvm::Type *jl_value)
+static inline llvm::Value *emit_bitcast_with_builder(llvm::IRBuilder<> &builder, llvm::Value *v, llvm::Type *language_value)
 {
     using namespace llvm;
-    if (isa<PointerType>(jl_value) &&
-        v->getType()->getPointerAddressSpace() != jl_value->getPointerAddressSpace()) {
+    if (isa<PointerType>(language_value) &&
+        v->getType()->getPointerAddressSpace() != language_value->getPointerAddressSpace()) {
         // Cast to the proper address space
         #if LANGUAGE_LLVM_VERSION >= 170000
-        Type *jl_value_addr = PointerType::get(jl_value, v->getType()->getPointerAddressSpace());
+        Type *language_value_addr = PointerType::get(language_value, v->getType()->getPointerAddressSpace());
         #else
-        Type *jl_value_addr = PointerType::getWithSamePointeeType(cast<PointerType>(jl_value), v->getType()->getPointerAddressSpace());
+        Type *language_value_addr = PointerType::getWithSamePointeeType(cast<PointerType>(language_value), v->getType()->getPointerAddressSpace());
         #endif
-        return builder.CreateBitCast(v, jl_value_addr);
+        return builder.CreateBitCast(v, language_value_addr);
     }
     else {
-        return builder.CreateBitCast(v, jl_value);
+        return builder.CreateBitCast(v, language_value);
     }
 }
 
@@ -225,7 +225,7 @@ static inline llvm::Value *get_current_task_from_pgcstack(llvm::IRBuilder<> &bui
     using namespace llvm;
     auto T_ppjlvalue = JuliaType::get_ppjlvalue_ty(builder.getContext());
     auto T_pjlvalue = JuliaType::get_pjlvalue_ty(builder.getContext());
-    const int pgcstack_offset = offsetof(jl_task_t, gcstack);
+    const int pgcstack_offset = offsetof(language_task_t, gcstack);
     return builder.CreateInBoundsGEP(
             T_pjlvalue, emit_bitcast_with_builder(builder, pgcstack, T_ppjlvalue),
             ConstantInt::get(T_size, -(pgcstack_offset / sizeof(void *))),
@@ -238,7 +238,7 @@ static inline llvm::Value *get_current_ptls_from_task(llvm::IRBuilder<> &builder
     using namespace llvm;
     auto T_ppjlvalue = JuliaType::get_ppjlvalue_ty(builder.getContext());
     auto T_pjlvalue = JuliaType::get_pjlvalue_ty(builder.getContext());
-    const int ptls_offset = offsetof(jl_task_t, ptls);
+    const int ptls_offset = offsetof(language_task_t, ptls);
     llvm::Value *pptls = builder.CreateInBoundsGEP(
             T_pjlvalue, emit_bitcast_with_builder(builder, current_task, T_ppjlvalue),
             ConstantInt::get(T_size, ptls_offset / sizeof(void *)),
@@ -257,7 +257,7 @@ static inline llvm::Value *get_current_signal_page_from_ptls(llvm::IRBuilder<> &
     // return builder.CreateCall(prepare_call(reuse_signal_page_func));
     auto T_psize = T_size->getPointerTo();
     auto T_ppsize = T_psize->getPointerTo();
-    int nthfield = offsetof(jl_tls_states_t, safepoint) / sizeof(void *);
+    int nthfield = offsetof(language_tls_states_t, safepoint) / sizeof(void *);
     ptls = emit_bitcast_with_builder(builder, ptls, T_ppsize);
     llvm::Value *psafepoint = builder.CreateInBoundsGEP(
             T_psize, ptls, ConstantInt::get(T_size, nthfield));
@@ -306,7 +306,7 @@ static inline llvm::Value *emit_gc_state_set(llvm::IRBuilder<> &builder, llvm::T
     using namespace llvm;
     Type *T_int8 = state->getType();
     llvm::Value *ptls_i8 = emit_bitcast_with_builder(builder, ptls, builder.getInt8PtrTy());
-    Constant *offset = ConstantInt::getSigned(builder.getInt32Ty(), offsetof(jl_tls_states_t, gc_state));
+    Constant *offset = ConstantInt::getSigned(builder.getInt32Ty(), offsetof(language_tls_states_t, gc_state));
     Value *gc_state = builder.CreateInBoundsGEP(T_int8, ptls_i8, ArrayRef<Value*>(offset), "gc_state");
     if (old_state == nullptr) {
         old_state = builder.CreateLoad(T_int8, gc_state);
