@@ -27,7 +27,7 @@
 #include <llvm/Support/ModRef.h>
 #endif
 
-#include "julia.h"
+#include "code.h"
 
 #define STR(csym)           #csym
 #define XSTR(csym)          STR(csym)
