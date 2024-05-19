@@ -1,30 +1,11 @@
-//===--- APIntMap.h - A map with APInts as the keys -------------*- C++ -*-===//
-//
-// This source file is part of the Swift.org open source project
-//
-// Copyright (c) 2014 - 2017 Apple Inc. and the Swift project authors
-// Licensed under Apache License v2.0 with Runtime Library Exception
-//
-// See https://swift.org/LICENSE.txt for license information
-// See https://swift.org/CONTRIBUTORS.txt for the list of Swift project authors
-//
-//===----------------------------------------------------------------------===//
-//
-// LLVM does not allow arbitrary APInts to be the keys of a DenseMap because
-// APInts are only comparable if they have the same bit-width.  This map
-// implementation assumes that its keys will always be constrained to their
-// minimum width, so it's not a general-purpose structure, but it does work.
-//
-//===----------------------------------------------------------------------===//
-
-#ifndef SWIFT_BASIC_APINTMAP_H
-#define SWIFT_BASIC_APINTMAP_H
+#ifndef CODE_BASIC_APINTMAP_H
+#define CODE_BASIC_APINTMAP_H
 
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseMap.h"
-#include "swift/Basic/LLVM.h"
+#include "Basic/LLVM.h"
 
-namespace swift {
+namespace Code {
 
 struct WidthPreservingAPIntDenseMapInfo {
   // For the special values, we use -1 with a bit-width that isn't minimal
