@@ -37,10 +37,10 @@ extern "C" {
  */
 
 /**
- * Return the timestamp for use with Clang's
+ * Return the timestamp for use with Language's
  * \c -fbuild-session-timestamp= option.
  */
-CINDEX_LINKAGE unsigned long long clang_getBuildSessionTimestamp(void);
+CINDEX_LINKAGE unsigned long long lang_getBuildSessionTimestamp(void);
 
 /**
  * Object encapsulating information about overlaying virtual
@@ -50,12 +50,12 @@ typedef struct CXVirtualFileOverlayImpl *CXVirtualFileOverlay;
 
 /**
  * Create a \c CXVirtualFileOverlay object.
- * Must be disposed with \c clang_VirtualFileOverlay_dispose().
+ * Must be disposed with \c lang_VirtualFileOverlay_dispose().
  *
  * \param options is reserved, always pass 0.
  */
 CINDEX_LINKAGE CXVirtualFileOverlay
-clang_VirtualFileOverlay_create(unsigned options);
+lang_VirtualFileOverlay_create(unsigned options);
 
 /**
  * Map an absolute virtual file path to an absolute real one.
@@ -63,7 +63,7 @@ clang_VirtualFileOverlay_create(unsigned options);
  * \returns 0 for success, non-zero to indicate an error.
  */
 CINDEX_LINKAGE enum CXErrorCode
-clang_VirtualFileOverlay_addFileMapping(CXVirtualFileOverlay,
+lang_VirtualFileOverlay_addFileMapping(CXVirtualFileOverlay,
                                         const char *virtualPath,
                                         const char *realPath);
 
@@ -74,7 +74,7 @@ clang_VirtualFileOverlay_addFileMapping(CXVirtualFileOverlay,
  * \returns 0 for success, non-zero to indicate an error.
  */
 CINDEX_LINKAGE enum CXErrorCode
-clang_VirtualFileOverlay_setCaseSensitivity(CXVirtualFileOverlay,
+lang_VirtualFileOverlay_setCaseSensitivity(CXVirtualFileOverlay,
                                             int caseSensitive);
 
 /**
@@ -82,27 +82,27 @@ clang_VirtualFileOverlay_setCaseSensitivity(CXVirtualFileOverlay,
  *
  * \param options is reserved, always pass 0.
  * \param out_buffer_ptr pointer to receive the buffer pointer, which should be
- * disposed using \c clang_free().
+ * disposed using \c lang_free().
  * \param out_buffer_size pointer to receive the buffer size.
  * \returns 0 for success, non-zero to indicate an error.
  */
 CINDEX_LINKAGE enum CXErrorCode
-clang_VirtualFileOverlay_writeToBuffer(CXVirtualFileOverlay, unsigned options,
+lang_VirtualFileOverlay_writeToBuffer(CXVirtualFileOverlay, unsigned options,
                                        char **out_buffer_ptr,
                                        unsigned *out_buffer_size);
 
 /**
- * free memory allocated by libclang, such as the buffer returned by
- * \c CXVirtualFileOverlay() or \c clang_ModuleMapDescriptor_writeToBuffer().
+ * free memory allocated by liblang, such as the buffer returned by
+ * \c CXVirtualFileOverlay() or \c lang_ModuleMapDescriptor_writeToBuffer().
  *
  * \param buffer memory pointer to free.
  */
-CINDEX_LINKAGE void clang_free(void *buffer);
+CINDEX_LINKAGE void lang_free(void *buffer);
 
 /**
  * Dispose a \c CXVirtualFileOverlay object.
  */
-CINDEX_LINKAGE void clang_VirtualFileOverlay_dispose(CXVirtualFileOverlay);
+CINDEX_LINKAGE void lang_VirtualFileOverlay_dispose(CXVirtualFileOverlay);
 
 /**
  * Object encapsulating information about a module.map file.
@@ -111,19 +111,19 @@ typedef struct CXModuleMapDescriptorImpl *CXModuleMapDescriptor;
 
 /**
  * Create a \c CXModuleMapDescriptor object.
- * Must be disposed with \c clang_ModuleMapDescriptor_dispose().
+ * Must be disposed with \c lang_ModuleMapDescriptor_dispose().
  *
  * \param options is reserved, always pass 0.
  */
 CINDEX_LINKAGE CXModuleMapDescriptor
-clang_ModuleMapDescriptor_create(unsigned options);
+lang_ModuleMapDescriptor_create(unsigned options);
 
 /**
  * Sets the framework module name that the module.map describes.
  * \returns 0 for success, non-zero to indicate an error.
  */
 CINDEX_LINKAGE enum CXErrorCode
-clang_ModuleMapDescriptor_setFrameworkModuleName(CXModuleMapDescriptor,
+lang_ModuleMapDescriptor_setFrameworkModuleName(CXModuleMapDescriptor,
                                                  const char *name);
 
 /**
@@ -131,7 +131,7 @@ clang_ModuleMapDescriptor_setFrameworkModuleName(CXModuleMapDescriptor,
  * \returns 0 for success, non-zero to indicate an error.
  */
 CINDEX_LINKAGE enum CXErrorCode
-clang_ModuleMapDescriptor_setUmbrellaHeader(CXModuleMapDescriptor,
+lang_ModuleMapDescriptor_setUmbrellaHeader(CXModuleMapDescriptor,
                                             const char *name);
 
 /**
@@ -139,19 +139,19 @@ clang_ModuleMapDescriptor_setUmbrellaHeader(CXModuleMapDescriptor,
  *
  * \param options is reserved, always pass 0.
  * \param out_buffer_ptr pointer to receive the buffer pointer, which should be
- * disposed using \c clang_free().
+ * disposed using \c lang_free().
  * \param out_buffer_size pointer to receive the buffer size.
  * \returns 0 for success, non-zero to indicate an error.
  */
 CINDEX_LINKAGE enum CXErrorCode
-clang_ModuleMapDescriptor_writeToBuffer(CXModuleMapDescriptor, unsigned options,
+lang_ModuleMapDescriptor_writeToBuffer(CXModuleMapDescriptor, unsigned options,
                                        char **out_buffer_ptr,
                                        unsigned *out_buffer_size);
 
 /**
  * Dispose a \c CXModuleMapDescriptor object.
  */
-CINDEX_LINKAGE void clang_ModuleMapDescriptor_dispose(CXModuleMapDescriptor);
+CINDEX_LINKAGE void lang_ModuleMapDescriptor_dispose(CXModuleMapDescriptor);
 
 /**
  * @}
