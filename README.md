@@ -57,9 +57,9 @@ end
 
 ## Built With
 
-* Ada 83 - For Some mathematical capabilities
-* Assembly - For Cross-Platfrom Capabalities
-* Machine Code - For Manually adapting language for close-to-the-metal memory and hardware control.
+* Ada - Type System, Safety Features and Reliability
+* Assembly - Embedded Systems, Systems Programming
+* Machine Code - Manually adapting language for close-to-the-metal memory and hardware control.
 * Objective-C/C++ - For memory and hardware allocation capabalities
 * C/C++20 - The main programming language used
 * LLVM (Version 18.1.5) - For constructing compiler
