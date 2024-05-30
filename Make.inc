@@ -1469,7 +1469,7 @@ $(error BUILD_CUSTOM_LIBCXX is currently not supported, BUILD_LIBCXX will provid
 LDFLAGS += -L$(build_libdir)
 CXXLDFLAGS += -L$(build_libdir) -lc++abi -lc++
 ifeq ($(USECLANG),1)
-CXXLDFLAGS += -stdlib=libc++
+CXXLDFLAGS += -runtime=libc++
 else
 ifeq ($(USEGCC),1)
 $(error BUILD_CUSTOM_LIBCXX is currently only supported with Clang. Try setting BUILD_CUSTOM_LIBCXX=0 or USECLANG=1)
