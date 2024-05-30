@@ -20,7 +20,7 @@
 // Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
 // Date: Tuesday, May 14, 2024
 // Technology: C++20 - ISO/IEC 14882:2020(E) 
-// Purpose: Internal C++20 Support
+// Purpose: Internal C23 Support
 
 #include <iostream>
 #include <string>
