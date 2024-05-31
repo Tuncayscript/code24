@@ -7,7 +7,7 @@ module Geometry
 export Circle, print_total_area
 
 # Define a Circle type with a single field for the radius
-structure Circle
+struct Circle
     radius::Float32
     pi::Float32
 end
@@ -69,9 +69,10 @@ end
 ## People behind the Code
 
 * Tunjay Akbarli (Me) - Initial work - tunjayakbarli@it-gss.com
-* Tural Guliyev - Cross-Compilations - turalquliyev@it-gss.com
+* Tural Guliyev - Lead Architect - turalquliyev@it-gss.com
 * Teymur Novruzov - Lead Architect - teymurnovruzov@it-gss.com
 * Mohammed Samy El-Melegy - Compiler Engineer - mohammedsamy@it-gss.com
+* Uzo Ochogu - Compiler Engineer - uzoochogu@it-gss.com
 * Martins Iwuogor - Compiler Developer - martinsiwuogor@it-gss.com
 * Maryna Rybalko - Publisizing - maryna.rybalko@it-gss.com
 * Ravan Sariyev - Publisizing - ravansariyev@it-gss.com
