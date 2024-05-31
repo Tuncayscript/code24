@@ -1,4 +1,6 @@
-import sys, os
+import sys
+import os
+
 if len(sys.argv) != 3:
     sys.stderr.write("\nrelative_path.py - incomplete arguments: %s\n"%(sys.argv))
     sys.exit(1)
