@@ -1,558 +1,674 @@
-SRCDIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-CODEHOME := $(abspath $(SRCDIR)/..)
-BUILDDIR := .
+CODEHOME := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 include $(CODEHOME)/Make.inc
+# import LLVM_SHARED_LIB_NAME
 include $(CODEHOME)/deps/llvm-ver.make
 
-JCFLAGS += $(CFLAGS)
-JCXXFLAGS += $(CXXFLAGS)
-JCPPFLAGS += $(CPPFLAGS)
-LANGUAGEDFLAGS += $(LDFLAGS)
-
-# -I BUILDDIR comes before -I SRCDIR so that the user can override <options.h> on a per-build-directory basis
-#  for gcc/clang, suggested content is:
-#  #include_next <options.h>
-#  #define ARGUMENT_TO_OVERRIDE 1
-FLAGS := \
-	-D_GNU_SOURCE -I$(BUILDDIR) -I$(SRCDIR) \
-	-I$(SRCDIR)/flisp -I$(SRCDIR)/support \
-	-I$(LIBUV_INC) -I$(build_includedir) \
-	-I$(CODEHOME)/deps/valgrind
-FLAGS += -Wall -Wno-strict-aliasing -fno-omit-frame-pointer -fvisibility=hidden -fno-common \
-		 -Wno-comment -Wpointer-arith -Wundef
-ifeq ($(USEGCC),1) # GCC bug #25509 (void)__attribute__((warn_unused_result))
-FLAGS += -Wno-unused-result
+# Make sure the user didn't try to build in a path that will confuse the shell or make
+METACHARACTERS := [][?*{}() $$%:;&|!\#,\\`\":]\|/\./\|/\.\./
+ifneq (,$(findstring ',$(value BUILDROOT)))
+$(error cowardly refusing to build into directory with a single-quote in the path)
 endif
-JCFLAGS += -Wold-style-definition -Wstrict-prototypes -Wc++-compat
-
-ifeq ($(USECLANG),1)
-FLAGS += -Wno-return-type-c-linkage -Wno-atomic-alignment
+ifneq (,$(findstring ',$(value CODEHOME)))
+$(error cowardly refusing to build from source directory with a single-quote in the path)
+endif
+ifneq (,$(shell echo '$(value BUILDROOT)/' | grep '$(METACHARACTERS)'))
+$(error cowardly refusing to build into directory with a shell-metacharacter in the path\
+    (got: $(value BUILDROOT)))
+endif
+ifneq (,$(shell echo '$(value CODEHOME)/' | grep '$(METACHARACTERS)'))
+$(error cowardly refusing to build from source directory with a shell-metacharacter in the path\
+    (got: $(value CODEHOME)))
 endif
 
-FLAGS += -DLANGUAGE_BUILD_ARCH='"$(ARCH)"'
-ifeq ($(OS),WINNT)
-FLAGS += -DLANGUAGE_BUILD_UNAME='"NT"'
-else
-FLAGS += -DLANGUAGE_BUILD_UNAME='"$(OS)"'
-endif
-
-ifeq ($(OS),FreeBSD)
-FLAGS += -I$(LOCALBASE)/include
-endif
-
-SRCS := \
-	jltypes gf typemap smallintset ast builtins module interpreter symbol \
-	dlload sys init task array genericmemory staticdata toplevel language_uv datatype \
-	simplevector runtime_intrinsics precompile jloptions mtarraylist \
-	threading scheduler stackwalk gc gc-debug gc-pages gc-stacks gc-alloc-profiler gc-page-profiler method \
-	api signal-handling safepoint timing subtype rtutils gc-heap-snapshot \
-	crc32c APInt-C processor ircode opaque_closure codegen-stubs coverage runtime_ccall
-
-RT_LLVMLINK :=
-CG_LLVMLINK :=
-
-ifeq ($(CODECODEGEN),LLVM)
-CODEGEN_SRCS := codegen jitlayers aotcompile debuginfo disasm llvm-simdloop llvm-muladd \
-	llvm-final-gc-lowering llvm-pass-helpers llvm-late-gc-lowering llvm-ptls \
-	llvm-lower-handlers llvm-gc-invariant-verifier llvm-propagate-addrspaces \
-	llvm-multiversioning llvm-alloc-opt llvm-alloc-helpers cgmemmgr llvm-remove-addrspaces \
-	llvm-remove-ni llvm-code-licm llvm-demote-float16 llvm-cpufeatures pipeline llvm_api
-FLAGS += -I$(shell $(LLVM_CONFIG_HOST) --includedir)
-CG_LLVM_LIBS := all
-ifeq ($(USE_POLLY),1)
-CG_LLVMLINK += -lPolly -lPollyISL
-FLAGS += -I$(shell $(LLVM_CONFIG_HOST) --src-root)/tools/polly/include
-FLAGS += -I$(shell $(LLVM_CONFIG_HOST) --obj-root)/tools/polly/include
-FLAGS += -DUSE_POLLY
-ifeq ($(USE_POLLY_OPENMP),1)
-FLAGS += -fopenmp
-endif
-ifeq ($(USE_POLLY_ACC),1)
-CG_LLVMLINK += -lPollyPPCG -lGPURuntime
-FLAGS += -DUSE_POLLY_ACC
-FLAGS += -I$(shell $(LLVM_CONFIG_HOST) --src-root)/tools/polly/tools # Required to find GPURuntime/GPUJIT.h
-endif
-endif
-else
-# CODECODEGEN != LLVM
-endif
-
-RT_LLVM_LIBS := support
-
-ifeq ($(shell test $(LLVM_VER_MAJ) -ge 16 && echo true),true)
-RT_LLVM_LIBS += targetparser
-endif
-
-ifeq ($(OS),WINNT)
-SRCS += win32_ucontext
-endif
-
-ifeq ($(WITH_DTRACE),1)
-DTRACE_HEADERS := uprobes.h.gen
-ifneq ($(OS),Darwin)
-SRCS += uprobes
-endif
-else
-DTRACE_HEADERS :=
-endif
-.SECONDARY: $(addprefix $(BUILDDIR)/,$(DTRACE_HEADERS))
-
-# headers are used for dependency tracking, while public headers will be part of the dist
-UV_HEADERS :=
-ifeq ($(USE_SYSTEM_LIBUV),0)
-UV_HEADERS += uv.h
-UV_HEADERS += uv/*.h
-endif
-PUBLIC_HEADERS := $(BUILDDIR)/language_version.h $(wildcard $(SRCDIR)/support/*.h) $(addprefix $(SRCDIR)/,work-stealing-queue.h code.h language_assert.h language_threads.h language_fasttls.h language_locks.h language_atomics.h options.h)
-ifeq ($(OS),WINNT)
-PUBLIC_HEADERS += $(addprefix $(SRCDIR)/,win32_ucontext.h)
-endif
-HEADERS := $(PUBLIC_HEADERS) $(addprefix $(SRCDIR)/,language_internal.h options.h timing.h passes.h) $(addprefix $(BUILDDIR)/,$(DTRACE_HEADERS) language_internal_funcs.inc)
-PUBLIC_HEADERS += $(addprefix $(SRCDIR)/,language_gcext.h)
-PUBLIC_HEADER_TARGETS := $(addprefix $(build_includedir)/code/,$(notdir $(PUBLIC_HEADERS)) $(UV_HEADERS))
-
-LLVM_LDFLAGS := $(shell $(LLVM_CONFIG_HOST) --ldflags)
-LLVM_CXXFLAGS := $(shell $(LLVM_CONFIG_HOST) --cxxflags)
-
-ifeq ($(OS)_$(BINARY),WINNT_32)
-LLVM_CXXFLAGS += -I$(SRCDIR)/support/win32-clang-ABI-bug
-endif
-
-# llvm-config --cxxflags does not return -DNDEBUG
-ifeq ($(shell $(LLVM_CONFIG_HOST) --assertion-mode),OFF)
-LLVM_CXXFLAGS += -DNDEBUG
-endif
-
-ifeq ($(CODECODEGEN),LLVM)
-ifneq ($(USE_SYSTEM_LLVM),0)
-# USE_SYSTEM_LLVM != 0
-CG_LLVMLINK += $(LLVM_LDFLAGS) $(shell $(LLVM_CONFIG_HOST) --libs --system-libs)
-LLVM_SHLIB_SYMBOL_VERSION := $(shell nm -D --with-symbol-versions $(shell $(LLVM_CONFIG_HOST) --libfiles --link-shared | awk '{print $1; exit}') | \
-                               grep _ZN4llvm3Any6TypeId | head -n 1 | sed -e 's/.*@//')
-
-# HACK: llvm-config doesn't correctly point to shared libs on all platforms
-#       https://github.com/CodeLang/code/issues/29981
-else
-# USE_SYSTEM_LLVM == 0
-ifneq ($(USE_LLVM_SHLIB),1)
-# USE_LLVM_SHLIB != 1
-CG_LLVMLINK += $(LLVM_LDFLAGS) $(shell $(LLVM_CONFIG_HOST) --libs $(CG_LLVM_LIBS) --link-static) $($(LLVM_LDFLAGS) $(shell $(LLVM_CONFIG_HOST) --system-libs 2> /dev/null)
-else
-# USE_LLVM_SHLIB == 1
-ifeq ($(OS), Darwin)
-CG_LLVMLINK += $(LLVM_LDFLAGS) -lLLVM
-else
-CG_LLVMLINK += $(LLVM_LDFLAGS) $(LLVM_SHARED_LINK_FLAG)
-endif # OS
-endif # USE_LLVM_SHLIB
-endif # USE_SYSTEM_LLVM
-
-ifeq ($(USE_LLVM_SHLIB),1)
-FLAGS += -DLLVM_SHLIB
-endif # USE_LLVM_SHLIB == 1
-endif # CODECODEGEN == LLVM
-
-RT_LLVM_LINK_ARGS := $(shell $(LLVM_CONFIG_HOST) --libs $(RT_LLVM_LIBS) --system-libs --link-static)
-RT_LLVMLINK += $(LLVM_LDFLAGS) $(RT_LLVM_LINK_ARGS)
-ifeq ($(OS), WINNT)
-RT_LLVMLINK += -luuid -lole32
-endif
-
-CLANG_LDFLAGS := $(LLVM_LDFLAGS)
-ifeq ($(OS), Darwin)
-CLANG_LDFLAGS += -Wl,-undefined,dynamic_lookup
-OSLIBS += -Wl,-U,__dyld_atfork_parent -Wl,-U,__dyld_atfork_prepare -Wl,-U,__dyld_dlopen_atfork_parent -Wl,-U,__dyld_dlopen_atfork_prepare -Wl,-U,_language_image_pointers -Wl,-U,_language_system_image_data -Wl,-U,_language_system_image_size
-LIBCODE_PATH_REL := @rpath/libcode
-else
-LIBCODE_PATH_REL := libcode
-endif
-
-COMMON_LIBPATHS := -L$(build_libdir) -L$(build_shlibdir)
-RT_LIBS := $(WHOLE_ARCHIVE) $(LIBUV) $(WHOLE_ARCHIVE) $(LIBUTF8PROC) $(NO_WHOLE_ARCHIVE) $(LIBUNWIND) $(RT_LLVMLINK) $(OSLIBS) $(LIBTRACYCLIENT) $(LIBITTAPI)
-CG_LIBS := $(LIBUNWIND) $(CG_LLVMLINK) $(OSLIBS) $(LIBTRACYCLIENT) $(LIBITTAPI)
-RT_DEBUG_LIBS := $(COMMON_LIBPATHS) $(WHOLE_ARCHIVE) $(BUILDDIR)/flisp/libflisp-debug.a $(WHOLE_ARCHIVE) $(BUILDDIR)/support/libsupport-debug.a -lcode-debug $(RT_LIBS)
-CG_DEBUG_LIBS := $(COMMON_LIBPATHS) $(CG_LIBS) -lcode-debug -lcode-internal-debug
-RT_RELEASE_LIBS := $(COMMON_LIBPATHS) $(WHOLE_ARCHIVE) $(BUILDDIR)/flisp/libflisp.a $(WHOLE_ARCHIVE) $(BUILDDIR)/support/libsupport.a -lcode $(RT_LIBS)
-CG_RELEASE_LIBS := $(COMMON_LIBPATHS) $(CG_LIBS) -lcode -lcode-internal
-
-OBJS := $(SRCS:%=$(BUILDDIR)/%.o)
-DOBJS := $(SRCS:%=$(BUILDDIR)/%.dbg.obj)
-
-CODEGEN_OBJS := $(CODEGEN_SRCS:%=$(BUILDDIR)/%.o)
-CODEGEN_DOBJS := $(CODEGEN_SRCS:%=$(BUILDDIR)/%.dbg.obj)
-
-# Add SONAME defines so we can embed proper `dlopen()` calls.
-ADDL_SHIPFLAGS  := "-DLANGUAGE_SYSTEM_IMAGE_PATH=\"$(build_private_libdir_rel)/sys.$(SHLIB_EXT)\"" \
-                   "-DLANGUAGE_LIBCODE_SONAME=\"$(LIBCODE_PATH_REL).$(LANGUAGE_MAJOR_SHLIB_EXT)\""
-ADDL_DEBUGFLAGS := "-DLANGUAGE_SYSTEM_IMAGE_PATH=\"$(build_private_libdir_rel)/sys-debug.$(SHLIB_EXT)\"" \
-                   "-DLANGUAGE_LIBCODE_SONAME=\"$(LIBCODE_PATH_REL)-debug.$(LANGUAGE_MAJOR_SHLIB_EXT)\""
-
-SHIPFLAGS         += $(FLAGS) $(ADDL_SHIPFLAGS)
-DEBUGFLAGS        += $(FLAGS) $(ADDL_DEBUGFLAGS)
-SHIPFLAGS_GCC     += $(FLAGS) $(ADDL_SHIPFLAGS)
-DEBUGFLAGS_GCC    += $(FLAGS) $(ADDL_DEBUGFLAGS)
-SHIPFLAGS_CLANG   += $(FLAGS) $(ADDL_SHIPFLAGS)
-DEBUGFLAGS_CLANG  += $(FLAGS) $(ADDL_DEBUGFLAGS)
-
-ifeq ($(USE_CROSS_FLISP), 1)
-FLISPDIR := $(BUILDDIR)/flisp/host
-FLISP_EXECUTABLE_debug := $(FLISPDIR)/flisp-debug$(BUILD_EXE)
-FLISP_EXECUTABLE_release := $(FLISPDIR)/flisp$(BUILD_EXE)
-else
-FLISPDIR := $(BUILDDIR)/flisp
-FLISP_EXECUTABLE_debug := $(FLISPDIR)/flisp-debug$(EXE)
-FLISP_EXECUTABLE_release := $(FLISPDIR)/flisp$(EXE)
-endif
-ifeq ($(OS),WINNT)
-FLISP_EXECUTABLE := $(FLISP_EXECUTABLE_release)
-else
-FLISP_EXECUTABLE := $(FLISP_EXECUTABLE_$(CODE_BUILD_MODE))
-endif
+VERSDIR := v`cut -d. -f1-2 < $(CODEHOME)/VERSION`
 
 default: $(CODE_BUILD_MODE) # contains either "debug" or "release"
 all: debug release
 
-release debug: %: libcode-internal-% libcode-codegen-%
-
-$(BUILDDIR):
-	mkdir -p $(BUILDDIR)
-
-LLVM_CONFIG_ABSOLUTE := $(shell which $(LLVM_CONFIG))
-
-# Generate the DTrace header file, while also renaming the macros from
-# CODE_ to LANGUAGE_PROBE to clearly delinate them.
-$(BUILDDIR)/%.h.gen : $(SRCDIR)/%.d
-	@$(call PRINT_DTRACE, $(DTRACE) -h -s $< -o $@)
-	sed 's/CODE_/LANGUAGE_PROBE_/' $@ > $@.tmp
-	mv $@.tmp $@
-
-$(BUILDDIR)/language_internal_funcs.inc: $(SRCDIR)/language_exported_funcs.inc
-	# Generate `.inc` file that contains a list of `#define` macros to rename functions defined in `libcode-internal`
-	# to have a `ilanguage_` prefix instead of `code_`, to denote that they are coming from `libcode-internal`.  This avoids
-	# potential confusion with debugging tools, when inspecting a process that has both `libcode` and `libcode-internal`
-	# loaded at the same time.
-	grep 'XX(..*)' $< | sed -E 's/.*XX\((.+)\).*/#define \1 i\1/g' >$@
-
-# source file rules
-$(BUILDDIR)/%.o: $(SRCDIR)/%.c $(HEADERS) | $(BUILDDIR)
-	@$(call PRINT_CC, $(CC) $(JCPPFLAGS) $(JCFLAGS) $(LANGUAGE_CFLAGS) $(SHIPFLAGS) $(DISABLE_ASSERTIONS) -c $< -o $@)
-$(BUILDDIR)/%.dbg.obj: $(SRCDIR)/%.c $(HEADERS) | $(BUILDDIR)
-	@$(call PRINT_CC, $(CC) $(JCPPFLAGS) $(JCFLAGS) $(LANGUAGE_CFLAGS) $(DEBUGFLAGS) -c $< -o $@)
-$(BUILDDIR)/%.o: $(SRCDIR)/%.cpp $(SRCDIR)/llvm-version.h $(HEADERS) $(LLVM_CONFIG_ABSOLUTE) | $(BUILDDIR)
-	@$(call PRINT_CC, $(CXX) $(LLVM_CXXFLAGS) $(JCPPFLAGS) $(JCXXFLAGS) $(LANGUAGE_CXXFLAGS) $(SHIPFLAGS) $(CXX_DISABLE_ASSERTION) -c $< -o $@)
-$(BUILDDIR)/%.dbg.obj: $(SRCDIR)/%.cpp $(SRCDIR)/llvm-version.h $(HEADERS) $(LLVM_CONFIG_ABSOLUTE) | $(BUILDDIR)
-	@$(call PRINT_CC, $(CXX) $(LLVM_CXXFLAGS) $(JCPPFLAGS) $(JCXXFLAGS) $(LANGUAGE_CXXFLAGS) $(DEBUGFLAGS) -c $< -o $@)
-$(BUILDDIR)/%.o : $(SRCDIR)/%.d
-	@$(call PRINT_DTRACE, $(DTRACE) -G -s $< -o $@)
-$(BUILDDIR)/%.dbg.obj : $(SRCDIR)/%.d
-	@$(call PRINT_DTRACE, $(DTRACE) -G -s $< -o $@)
-
-# public header rules
-$(eval $(call dir_target,$(build_includedir)/code))
-define public_header_target
-$$(build_includedir)/code/$$(notdir $(1)): $(1) | $$(build_includedir)/code
-	$$(INSTALL_F) $$^ $$(build_includedir)/code/
-endef
-$(foreach HEADER,$(PUBLIC_HEADERS) $(LIBUV_INC)/uv.h,$(eval $(call public_header_target,$(HEADER))))
-
-$(eval $(call dir_target,$(build_includedir)/code/uv))
-$(build_includedir)/code/uv/*.h: $(LIBUV_INC)/uv/*.h | $(build_includedir)/code/uv
-	$(INSTALL_F) $^ $(build_includedir)/code/uv
-
-libccalltest: $(build_shlibdir)/libccalltest.$(SHLIB_EXT)
-libccalllazyfoo: $(build_shlibdir)/libccalllazyfoo.$(SHLIB_EXT)
-libccalllazybar: $(build_shlibdir)/libccalllazybar.$(SHLIB_EXT)
-libllvmcalltest: $(build_shlibdir)/libllvmcalltest.$(SHLIB_EXT)
-
-ifeq ($(OS), Linux)
-CODE_SPLITDEBUG := 1
+# sort is used to remove potential duplicates
+DIRS := $(sort $(build_bindir) $(build_depsbindir) $(build_libdir) $(build_private_libdir) $(build_libexecdir) $(build_includedir) $(build_includedir)/code $(build_sysconfdir)/code $(build_datarootdir)/code $(build_datarootdir)/code/runtime $(build_man1dir))
+ifneq ($(BUILDROOT),$(CODEHOME))
+BUILDDIRS := $(BUILDROOT) $(addprefix $(BUILDROOT)/,base src src/flisp src/support src/clangsa cli doc deps runtime test test/clangsa test/embedding test/gcext test/llvmpasses)
+BUILDDIRMAKE := $(addsuffix /Makefile,$(BUILDDIRS)) $(BUILDROOT)/sysimage.mk $(BUILDROOT)/pkgimage.mk
+DIRS += $(BUILDDIRS)
+$(BUILDDIRMAKE): | $(BUILDDIRS)
+	@# add Makefiles to the build directories for convenience (pointing back to the source location of each)
+	@echo '# -- This file is automatically generated in code/Makefile -- #' > $@
+	@echo 'BUILDROOT=$(BUILDROOT)' >> $@
+	@echo 'include $(CODEHOME)$(patsubst $(BUILDROOT)%,%,$@)' >> $@
+code-deps: | $(BUILDDIRMAKE)
+configure-y: | $(BUILDDIRMAKE)
+configure:
+ifeq ("$(origin O)", "command line")
+	@if [ "$$(ls '$(BUILDROOT)' 2> /dev/null)" ]; then \
+		printf $(WARNCOLOR)'WARNING: configure called on non-empty directory'$(ENDCOLOR)' %s\n' '$(BUILDROOT)'; \
+		read -p "Proceed [y/n]? " answer; \
+	else \
+		answer=y;\
+	fi; \
+	[ "y$$answer" = yy ] && $(MAKE) configure-$$answer
 else
-CODE_SPLITDEBUG := 0
+	$(error "cannot rerun configure from within a build directory")
 endif
-$(build_shlibdir)/libccalltest.$(SHLIB_EXT): $(SRCDIR)/ccalltest.c
-	@$(call PRINT_CC, $(CC) $(JCFLAGS) $(LANGUAGE_CFLAGS) $(JCPPFLAGS) $(FLAGS) -O3 $< $(fPIC) -shared -o $@.tmp $(LDFLAGS))
-	$(INSTALL_NAME_CMD)libccalltest.$(SHLIB_EXT) $@.tmp
-ifeq ($(CODE_SPLITDEBUG),1)
-	@# Create split debug info file for libccalltest stacktraces test
-	@# packagers should disable this by setting CODE_SPLITDEBUG=0 if this is already done by your build system
-	$(OBJCOPY) --only-keep-debug $@.tmp $@.debug
-	$(OBJCOPY) --strip-debug $@.tmp
-	$(OBJCOPY) --add-gnu-debuglink=$@.debug $@.tmp
+else
+configure:
+	$(error "must specify O=builddir to run the Code `make configure` target")
 endif
-	@## clang should have made the dSYM split-debug directory,
-	@## but we are intentionally not going to give it the correct name
-	@## because we want to test the non-default debug configuration
-	@#rm -rf $@.dSYM && mv $@.tmp.dSYM $@.dSYM
-	mv $@.tmp $@
-	$(INSTALL_NAME_CMD)libccalltest.$(SHLIB_EXT) $@
 
-$(build_shlibdir)/libccalllazyfoo.$(SHLIB_EXT): $(SRCDIR)/ccalllazyfoo.c
-	@$(call PRINT_CC, $(CC) $(JCFLAGS) $(LANGUAGE_CFLAGS) $(JCPPFLAGS) $(FLAGS) -O3 $< $(fPIC) -shared -o $@ $(LDFLAGS) $(COMMON_LIBPATHS) $(call SONAME_FLAGS,ccalllazyfoo.$(SHLIB_EXT)))
+$(foreach dir,$(DIRS),$(eval $(call dir_target,$(dir))))
+$(foreach link,base $(CODEHOME)/test,$(eval $(call symlink_target,$(link),$$(build_datarootdir)/code,$(notdir $(link)))))
 
-$(build_shlibdir)/libccalllazybar.$(SHLIB_EXT): $(SRCDIR)/ccalllazybar.c $(build_shlibdir)/libccalllazyfoo.$(SHLIB_EXT)
-	@$(call PRINT_CC, $(CC) $(JCFLAGS) $(LANGUAGE_CFLAGS) $(JCPPFLAGS) $(FLAGS) -O3 $< $(fPIC) -shared -o $@ $(LDFLAGS) $(COMMON_LIBPATHS) $(call SONAME_FLAGS,ccalllazybar.$(SHLIB_EXT)) -lccalllazyfoo)
+CODE_flisp.boot.inc.phony: code-deps
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/src CODE_flisp.boot.inc.phony
 
-$(build_shlibdir)/libllvmcalltest.$(SHLIB_EXT): $(SRCDIR)/llvmcalltest.cpp $(LLVM_CONFIG_ABSOLUTE)
-	@$(call PRINT_CC, $(CXX) $(LLVM_CXXFLAGS) $(FLAGS) $(CPPFLAGS) $(CXXFLAGS) -O3 $< $(fPIC) -shared -o $@ $(LDFLAGS) $(COMMON_LIBPATHS) $(NO_WHOLE_ARCHIVE) $(CG_LLVMLINK)) -lpthread
+# Build the HTML docs (skipped if already exists, notably in tarballs)
+$(BUILDROOT)/doc/_build/html/en/index.html: $(shell find $(BUILDROOT)/base $(BUILDROOT)/doc \( -path $(BUILDROOT)/doc/_build -o -path $(BUILDROOT)/doc/deps -o -name *_constants.jl -o -name *_h.jl -o -name version_git.jl \) -prune -o -type f -print)
+	@$(MAKE) docs
 
-language_flisp.boot.inc.phony: $(BUILDDIR)/language_flisp.boot.inc
-
-$(BUILDDIR)/language_flisp.boot.inc: $(BUILDDIR)/language_flisp.boot $(FLISP_EXECUTABLE_release)
-	@$(call PRINT_FLISP, $(call spawn,$(FLISP_EXECUTABLE_release)) $(call cygpath_w,$(SRCDIR)/bin2hex.scm) < $< > $@)
-
-$(BUILDDIR)/language_flisp.boot: $(addprefix $(SRCDIR)/,frontend.scm flisp/aliases.scm flisp/profile.scm \
-		parser.scm syntax.scm match.scm utils.scm ast.scm macroexpand.scm mk_language_flisp_boot.scm) \
-		$(FLISP_EXECUTABLE_release)
-	@$(call PRINT_FLISP, $(call spawn,$(FLISP_EXECUTABLE_release)) \
-		$(call cygpath_w,$(SRCDIR)/mk_language_flisp_boot.scm) $(call cygpath_w,$(dir $<)) $(notdir $<) $(call cygpath_w,$@))
-
-# additional dependency links
-$(BUILDDIR)/codegen-stubs.o $(BUILDDIR)/codegen-stubs.dbg.obj: $(SRCDIR)/intrinsics.h
-$(BUILDDIR)/aotcompile.o $(BUILDDIR)/aotcompile.dbg.obj: $(SRCDIR)/jitlayers.h $(SRCDIR)/llvm-codegen-shared.h $(SRCDIR)/processor.h
-$(BUILDDIR)/ast.o $(BUILDDIR)/ast.dbg.obj: $(BUILDDIR)/language_flisp.boot.inc $(SRCDIR)/flisp/*.h
-$(BUILDDIR)/builtins.o $(BUILDDIR)/builtins.dbg.obj: $(SRCDIR)/iddict.c $(SRCDIR)/idset.c $(SRCDIR)/builtin_proto.h
-$(BUILDDIR)/codegen.o $(BUILDDIR)/codegen.dbg.obj: $(addprefix $(SRCDIR)/,\
-	intrinsics.cpp jitlayers.h intrinsics.h llvm-codegen-shared.h cgutils.cpp ccall.cpp abi_*.cpp processor.h builtin_proto.h)
-$(BUILDDIR)/datatype.o $(BUILDDIR)/datatype.dbg.obj: $(SRCDIR)/support/htable.h $(SRCDIR)/support/htable.inc
-$(BUILDDIR)/debuginfo.o $(BUILDDIR)/debuginfo.dbg.obj: $(addprefix $(SRCDIR)/,debuginfo.h processor.h jitlayers.h debug-registry.h)
-$(BUILDDIR)/disasm.o $(BUILDDIR)/disasm.dbg.obj: $(SRCDIR)/debuginfo.h $(SRCDIR)/processor.h
-$(BUILDDIR)/gc-debug.o $(BUILDDIR)/gc-debug.dbg.obj: $(SRCDIR)/gc.h
-$(BUILDDIR)/gc-pages.o $(BUILDDIR)/gc-pages.dbg.obj: $(SRCDIR)/gc.h
-$(BUILDDIR)/gc.o $(BUILDDIR)/gc.dbg.obj: $(SRCDIR)/gc.h $(SRCDIR)/gc-heap-snapshot.h $(SRCDIR)/gc-alloc-profiler.h $(SRCDIR)/gc-page-profiler.h
-$(BUILDDIR)/gc-heap-snapshot.o $(BUILDDIR)/gc-heap-snapshot.dbg.obj: $(SRCDIR)/gc.h $(SRCDIR)/gc-heap-snapshot.h
-$(BUILDDIR)/gc-alloc-profiler.o $(BUILDDIR)/gc-alloc-profiler.dbg.obj: $(SRCDIR)/gc.h $(SRCDIR)/gc-alloc-profiler.h
-$(BUILDDIR)/gc-page-profiler.o $(BUILDDIR)/gc-page-profiler.dbg.obj: $(SRCDIR)/gc-page-profiler.h
-$(BUILDDIR)/init.o $(BUILDDIR)/init.dbg.obj: $(SRCDIR)/builtin_proto.h
-$(BUILDDIR)/interpreter.o $(BUILDDIR)/interpreter.dbg.obj: $(SRCDIR)/builtin_proto.h
-$(BUILDDIR)/jitlayers.o $(BUILDDIR)/jitlayers.dbg.obj: $(SRCDIR)/jitlayers.h $(SRCDIR)/llvm-codegen-shared.h
-$(BUILDDIR)/jltypes.o $(BUILDDIR)/jltypes.dbg.obj: $(SRCDIR)/builtin_proto.h
-$(build_shlibdir)/libllvmcalltest.$(SHLIB_EXT): $(SRCDIR)/llvm-codegen-shared.h $(BUILDDIR)/language_version.h
-$(BUILDDIR)/llvm-alloc-helpers.o $(BUILDDIR)/llvm-alloc-helpers.dbg.obj: $(SRCDIR)/llvm-codegen-shared.h $(SRCDIR)/llvm-pass-helpers.h $(SRCDIR)/llvm-alloc-helpers.h
-$(BUILDDIR)/llvm-alloc-opt.o $(BUILDDIR)/llvm-alloc-opt.dbg.obj: $(SRCDIR)/llvm-codegen-shared.h $(SRCDIR)/llvm-pass-helpers.h $(SRCDIR)/llvm-alloc-helpers.h
-$(BUILDDIR)/llvm-cpufeatures.o $(BUILDDIR)/llvm-cpufeatures.dbg.obj: $(SRCDIR)/jitlayers.h
-$(BUILDDIR)/llvm-demote-float16.o $(BUILDDIR)/llvm-demote-float16.dbg.obj: $(SRCDIR)/jitlayers.h
-$(BUILDDIR)/llvm-final-gc-lowering.o $(BUILDDIR)/llvm-final-gc-lowering.dbg.obj: $(SRCDIR)/llvm-pass-helpers.h $(SRCDIR)/llvm-codegen-shared.h
-$(BUILDDIR)/llvm-gc-invariant-verifier.o $(BUILDDIR)/llvm-gc-invariant-verifier.dbg.obj: $(SRCDIR)/llvm-codegen-shared.h
-$(BUILDDIR)/llvm-code-licm.o $(BUILDDIR)/llvm-code-licm.dbg.obj: $(SRCDIR)/llvm-codegen-shared.h $(SRCDIR)/llvm-alloc-helpers.h $(SRCDIR)/llvm-pass-helpers.h
-$(BUILDDIR)/llvm-late-gc-lowering.o $(BUILDDIR)/llvm-late-gc-lowering.dbg.obj: $(SRCDIR)/llvm-pass-helpers.h $(SRCDIR)/llvm-codegen-shared.h
-$(BUILDDIR)/llvm-lower-handlers.o $(BUILDDIR)/llvm-lower-handlers.dbg.obj: $(SRCDIR)/llvm-codegen-shared.h
-$(BUILDDIR)/llvm-multiversioning.o $(BUILDDIR)/llvm-multiversioning.dbg.obj: $(SRCDIR)/llvm-codegen-shared.h $(SRCDIR)/processor.h
-$(BUILDDIR)/llvm-pass-helpers.o $(BUILDDIR)/llvm-pass-helpers.dbg.obj: $(SRCDIR)/llvm-pass-helpers.h $(SRCDIR)/llvm-codegen-shared.h
-$(BUILDDIR)/llvm-propagate-addrspaces.o $(BUILDDIR)/llvm-propagate-addrspaces.dbg.obj: $(SRCDIR)/llvm-codegen-shared.h
-$(BUILDDIR)/llvm-remove-addrspaces.o $(BUILDDIR)/llvm-remove-addrspaces.dbg.obj: $(SRCDIR)/llvm-codegen-shared.h
-$(BUILDDIR)/llvm-ptls.o $(BUILDDIR)/llvm-ptls.dbg.obj: $(SRCDIR)/llvm-codegen-shared.h
-$(BUILDDIR)/processor.o $(BUILDDIR)/processor.dbg.obj: $(addprefix $(SRCDIR)/,processor_*.cpp processor.h features_*.h)
-$(BUILDDIR)/signal-handling.o $(BUILDDIR)/signal-handling.dbg.obj: $(addprefix $(SRCDIR)/,signals-*.c)
-$(BUILDDIR)/staticdata.o $(BUILDDIR)/staticdata.dbg.obj: $(SRCDIR)/staticdata_utils.c $(SRCDIR)/precompile_utils.c $(SRCDIR)/processor.h $(SRCDIR)/builtin_proto.h
-$(BUILDDIR)/toplevel.o $(BUILDDIR)/toplevel.dbg.obj: $(SRCDIR)/builtin_proto.h
-$(BUILDDIR)/ircode.o $(BUILDDIR)/ircode.dbg.obj: $(SRCDIR)/serialize.h $(SRCDIR)/common_symbols1.inc $(SRCDIR)/common_symbols2.inc
-$(BUILDDIR)/pipeline.o $(BUILDDIR)/pipeline.dbg.obj: $(SRCDIR)/passes.h $(SRCDIR)/jitlayers.h
-
-$(addprefix $(BUILDDIR)/,threading.o threading.dbg.obj gc.o gc.dbg.obj init.c init.dbg.obj task.o task.dbg.obj): $(addprefix $(SRCDIR)/,threading.h)
-$(addprefix $(BUILDDIR)/,APInt-C.o APInt-C.dbg.obj runtime_intrinsics.o runtime_intrinsics.dbg.obj): $(SRCDIR)/APInt-C.h
-
-# archive library file rules
-$(BUILDDIR)/support/libsupport.a: $(addprefix $(SRCDIR)/support/,*.h *.c *.S *.inc) $(SRCDIR)/support/*.c
-	$(MAKE) -C $(SRCDIR)/support BUILDDIR='$(abspath $(BUILDDIR)/support)'
-
-$(BUILDDIR)/support/libsupport-debug.a: $(addprefix $(SRCDIR)/support/,*.h *.c *.S *.inc) $(SRCDIR)/support/*.c
-	$(MAKE) -C $(SRCDIR)/support debug BUILDDIR='$(abspath $(BUILDDIR)/support)'
-
-$(FLISP_EXECUTABLE_release): $(BUILDDIR)/flisp/libflisp.a
-	$(MAKE) -C $(BUILDDIR)/flisp $(subst $(abspath $(BUILDDIR)/flisp)/,,$(abspath $(FLISP_EXECUTABLE_release)))
-
-$(FLISP_EXECUTABLE_debug): $(BUILDDIR)/flisp/libflisp-debug.a
-	$(MAKE) -C $(BUILDDIR)/flisp $(subst $(abspath $(BUILDDIR)/flisp)/,,$(abspath $(FLISP_EXECUTABLE_debug)))
-
-$(BUILDDIR)/flisp/libflisp.a: $(addprefix $(SRCDIR)/flisp/,*.h *.c) $(BUILDDIR)/support/libsupport.a $(BUILDDIR)/code.expmap
-	$(MAKE) -C $(SRCDIR)/flisp BUILDDIR='$(abspath $(BUILDDIR)/flisp)'
-
-$(BUILDDIR)/flisp/libflisp-debug.a: $(addprefix $(SRCDIR)/,flisp/*.h flisp/*.c) $(BUILDDIR)/support/libsupport-debug.a $(BUILDDIR)/code.expmap
-	$(MAKE) -C $(SRCDIR)/flisp debug BUILDDIR='$(abspath $(BUILDDIR)/flisp)'
-
-$(BUILDDIR)/language_version.h: $(CODEHOME)/VERSION
-	@echo "// This is an autogenerated header file" > $@.$(CODE_BUILD_MODE).tmp
-	@echo "#ifndef LANGUAGE_VERSION_H" >> $@.$(CODE_BUILD_MODE).tmp
-	@echo "#define LANGUAGE_VERSION_H" >> $@.$(CODE_BUILD_MODE).tmp
-	@echo "#define CODE_VERSION_STRING" \"$(CODE_VERSION)\" >> $@.$(CODE_BUILD_MODE).tmp
-	@echo $(CODE_VERSION) | awk 'BEGIN {FS="[.,+-]"} \
-	{print "#define CODE_VERSION_MAJOR " $$1 "\n" \
-	"#define CODE_VERSION_MINOR " $$2 "\n" \
-	"#define CODE_VERSION_PATCH " $$3 ; \
-	if (NF<4) print "#define CODE_VERSION_IS_RELEASE 1" ; else print  "#define CODE_VERSION_IS_RELEASE 0"}' >> $@.$(CODE_BUILD_MODE).tmp
-	@echo "#endif" >> $@.$(CODE_BUILD_MODE).tmp
-	mv $@.$(CODE_BUILD_MODE).tmp $@
-
-CXXLD = $(CXX) -shared
-
-$(BUILDDIR)/code.expmap: $(SRCDIR)/code.expmap.in
-	sed <'$<' >'$@' -e "s/@CODE_SHLIB_SYMBOL_VERSION@/LANGUAGE_LIBCODE_$(SOMAJOR)/" \
-		        -e "s/@LLVM_SHLIB_SYMBOL_VERSION@/$(LLVM_SHLIB_SYMBOL_VERSION)/"
-
-$(build_shlibdir)/libcode-internal.$(LANGUAGE_MAJOR_MINOR_SHLIB_EXT): $(BUILDDIR)/code.expmap $(OBJS) $(BUILDDIR)/flisp/libflisp.a $(BUILDDIR)/support/libsupport.a $(LIBUV)
-	@$(call PRINT_LINK, $(CXXLD) $(call IMPLIB_FLAGS,$@) $(JCXXFLAGS) $(LANGUAGE_CXXFLAGS) $(CXXLDFLAGS) $(SHIPFLAGS) $(OBJS) $(RPATH_LIB) -o $@ \
-		$(LANGUAGEDFLAGS) $(LANGUAGEIBLDFLAGS) $(RT_RELEASE_LIBS) $(call SONAME_FLAGS,libcode-internal.$(LANGUAGE_MAJOR_SHLIB_EXT)))
-	@$(INSTALL_NAME_CMD)libcode-internal.$(SHLIB_EXT) $@
-	$(DSYMUTIL) $@
-
-$(build_shlibdir)/libcode-internal-debug.$(LANGUAGE_MAJOR_MINOR_SHLIB_EXT): $(BUILDDIR)/code.expmap $(DOBJS) $(BUILDDIR)/flisp/libflisp-debug.a $(BUILDDIR)/support/libsupport-debug.a $(LIBUV)
-	@$(call PRINT_LINK, $(CXXLD) $(call IMPLIB_FLAGS,$@) $(JCXXFLAGS) $(LANGUAGE_CXXFLAGS) $(CXXLDFLAGS) $(DEBUGFLAGS) $(DOBJS) $(RPATH_LIB) -o $@ \
-		$(LANGUAGEDFLAGS) $(LANGUAGEIBLDFLAGS) $(RT_DEBUG_LIBS) $(call SONAME_FLAGS,libcode-internal-debug.$(LANGUAGE_MAJOR_SHLIB_EXT)))
-	@$(INSTALL_NAME_CMD)libcode-internal-debug.$(SHLIB_EXT) $@
-	$(DSYMUTIL) $@
-
-ifneq ($(OS), WINNT)
-$(build_shlibdir)/libcode-internal.$(LANGUAGE_MAJOR_SHLIB_EXT) $(build_shlibdir)/libcode-internal-debug.$(LANGUAGE_MAJOR_SHLIB_EXT): $(build_shlibdir)/libcode-internal%.$(LANGUAGE_MAJOR_SHLIB_EXT): \
-		$(build_shlibdir)/libcode-internal%.$(LANGUAGE_MAJOR_MINOR_SHLIB_EXT)
-	@$(call PRINT_LINK, ln -sf $(notdir $<) $@)
-$(build_shlibdir)/libcode-internal.$(SHLIB_EXT) $(build_shlibdir)/libcode-internal-debug.$(SHLIB_EXT): $(build_shlibdir)/libcode-internal%.$(SHLIB_EXT): \
-		$(build_shlibdir)/libcode-internal%.$(LANGUAGE_MAJOR_MINOR_SHLIB_EXT)
-	@$(call PRINT_LINK, ln -sf $(notdir $<) $@)
-$(build_shlibdir)/libcode-codegen.$(LANGUAGE_MAJOR_MINOR_SHLIB_EXT): $(build_shlibdir)/libcode-internal.$(SHLIB_EXT)
-$(build_shlibdir)/libcode-codegen-debug.$(LANGUAGE_MAJOR_MINOR_SHLIB_EXT): $(build_shlibdir)/libcode-internal-debug.$(SHLIB_EXT)
-libcode-internal-release: $(build_shlibdir)/libcode-internal.$(LANGUAGE_MAJOR_SHLIB_EXT) $(build_shlibdir)/libcode-internal.$(SHLIB_EXT)
-libcode-internal-debug: $(build_shlibdir)/libcode-internal-debug.$(LANGUAGE_MAJOR_SHLIB_EXT) $(build_shlibdir)/libcode-internal-debug.$(SHLIB_EXT)
+code-symlink: code-cli-$(CODE_BUILD_MODE)
+ifeq ($(OS),WINNT)
+	echo '@"%~dp0/'"$$(echo '$(call rel_path,$(BUILDROOT),$(CODE_EXECUTABLE))')"'" %*' | tr / '\\' > $(BUILDROOT)/code.bat
+	chmod a+x $(BUILDROOT)/code.bat
+else
+ifndef CODE_VAGRANT_BUILD
+	@ln -sf $(call rel_path,$(BUILDROOT),$(CODE_EXECUTABLE)) $(BUILDROOT)/code
 endif
-libcode-internal-release: $(build_shlibdir)/libcode-internal.$(LANGUAGE_MAJOR_MINOR_SHLIB_EXT)
-libcode-internal-debug: $(build_shlibdir)/libcode-internal-debug.$(LANGUAGE_MAJOR_MINOR_SHLIB_EXT)
-libcode-internal-debug libcode-internal-release: $(PUBLIC_HEADER_TARGETS)
-
-$(build_shlibdir)/libcode-codegen.$(LANGUAGE_MAJOR_MINOR_SHLIB_EXT): $(BUILDDIR)/code.expmap $(CODEGEN_OBJS) $(BUILDDIR)/support/libsupport.a $(build_shlibdir)/libcode-internal.$(LANGUAGE_MAJOR_MINOR_SHLIB_EXT)
-	@$(call PRINT_LINK, $(CXXLD) $(call IMPLIB_FLAGS,$@) $(JCXXFLAGS) $(LANGUAGE_CXXFLAGS) $(CXXLDFLAGS) $(SHIPFLAGS) $(CODEGEN_OBJS) $(RPATH_LIB) -o $@ \
-		$(LANGUAGEDFLAGS) $(LANGUAGEIBLDFLAGS) $(CG_RELEASE_LIBS) $(call SONAME_FLAGS,libcode-codegen.$(LANGUAGE_MAJOR_SHLIB_EXT)))
-	@$(INSTALL_NAME_CMD)libcode-codegen.$(SHLIB_EXT) $@
-	$(DSYMUTIL) $@
-
-$(build_shlibdir)/libcode-codegen-debug.$(LANGUAGE_MAJOR_MINOR_SHLIB_EXT): $(BUILDDIR)/code.expmap $(CODEGEN_DOBJS) $(BUILDDIR)/support/libsupport-debug.a $(build_shlibdir)/libcode-internal-debug.$(LANGUAGE_MAJOR_MINOR_SHLIB_EXT)
-	@$(call PRINT_LINK, $(CXXLD) $(call IMPLIB_FLAGS,$@) $(JCXXFLAGS) $(LANGUAGE_CXXFLAGS) $(CXXLDFLAGS) $(DEBUGFLAGS) $(CODEGEN_DOBJS) $(RPATH_LIB) -o $@ \
-		$(LANGUAGEDFLAGS) $(LANGUAGEIBLDFLAGS) $(CG_DEBUG_LIBS) $(call SONAME_FLAGS,libcode-codegen-debug.$(LANGUAGE_MAJOR_SHLIB_EXT)))
-	@$(INSTALL_NAME_CMD)libcode-codegen-debug.$(SHLIB_EXT) $@
-	$(DSYMUTIL) $@
-
-ifneq ($(OS), WINNT)
-$(build_shlibdir)/libcode-codegen.$(LANGUAGE_MAJOR_SHLIB_EXT) $(build_shlibdir)/libcode-codegen-debug.$(LANGUAGE_MAJOR_SHLIB_EXT): $(build_shlibdir)/libcode-codegen%.$(LANGUAGE_MAJOR_SHLIB_EXT): \
-		$(build_shlibdir)/libcode-codegen%.$(LANGUAGE_MAJOR_MINOR_SHLIB_EXT)
-	@$(call PRINT_LINK, ln -sf $(notdir $<) $@)
-$(build_shlibdir)/libcode-codegen.$(SHLIB_EXT) $(build_shlibdir)/libcode-codegen-debug.$(SHLIB_EXT): $(build_shlibdir)/libcode-codegen%.$(SHLIB_EXT): \
-		$(build_shlibdir)/libcode-codegen%.$(LANGUAGE_MAJOR_MINOR_SHLIB_EXT)
-	@$(call PRINT_LINK, ln -sf $(notdir $<) $@)
-libcode-codegen-release: $(build_shlibdir)/libcode-codegen.$(LANGUAGE_MAJOR_SHLIB_EXT) $(build_shlibdir)/libcode-codegen.$(SHLIB_EXT)
-libcode-codegen-debug: $(build_shlibdir)/libcode-codegen-debug.$(LANGUAGE_MAJOR_SHLIB_EXT) $(build_shlibdir)/libcode-codegen-debug.$(SHLIB_EXT)
 endif
-libcode-codegen-release: $(build_shlibdir)/libcode-codegen.$(LANGUAGE_MAJOR_MINOR_SHLIB_EXT)
-libcode-codegen-debug: $(build_shlibdir)/libcode-codegen-debug.$(LANGUAGE_MAJOR_MINOR_SHLIB_EXT)
-libcode-codegen-debug libcode-codegen-release: $(PUBLIC_HEADER_TARGETS)
 
-# set the exports for the source files based on where they are getting linked
-$(OBJS): SHIPFLAGS += -DLANGUAGE_LIBRARY_EXPORTS_INTERNAL
-$(DOBJS): DEBUGFLAGS += -DLANGUAGE_LIBRARY_EXPORTS_INTERNAL
-$(CODEGEN_OBJS): SHIPFLAGS += -DLANGUAGE_LIBRARY_EXPORTS_CODEGEN
-$(CODEGEN_DOBJS): DEBUGFLAGS += -DLANGUAGE_LIBRARY_EXPORTS_CODEGEN
+code-deps: | $(DIRS) $(build_datarootdir)/code/base $(build_datarootdir)/code/test
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/deps
 
-clean:
-	-rm -fr $(build_shlibdir)/libcode-internal* $(build_shlibdir)/libcode-codegen* $(build_shlibdir)/libccalltest* $(build_shlibdir)/libllvmcalltest*
-	-rm -f $(BUILDDIR)/language_flisp.boot $(BUILDDIR)/language_flisp.boot.inc $(BUILDDIR)/language_internal_funcs.inc
-	-rm -f $(BUILDDIR)/*.dbg.obj $(BUILDDIR)/*.o $(BUILDDIR)/*.dwo $(BUILDDIR)/*.$(SHLIB_EXT) $(BUILDDIR)/*.a $(BUILDDIR)/*.h.gen
-	-rm -f $(BUILDDIR)/code.expmap
-	-rm -f $(BUILDDIR)/language_version.h
+# `code-runtime` depends on `code-deps` so that the fake JLL runtimes can copy in their Artifacts.toml files.
+code-runtime: | $(DIRS) code-deps
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/runtime
 
-clean-flisp:
-	-$(MAKE) -C $(SRCDIR)/flisp clean BUILDDIR='$(abspath $(BUILDDIR)/flisp)'
+code-base: code-deps $(build_sysconfdir)/code/startup.jl $(build_man1dir)/code.1 $(build_datarootdir)/code/code-config.jl
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/base
 
-clean-support:
-	-$(MAKE) -C $(SRCDIR)/support clean BUILDDIR='$(abspath $(BUILDDIR)/support)'
+code-libccalltest: code-deps
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/src libccalltest
 
-cleanall: clean clean-flisp clean-support clean-analyzegc
+code-libccalllazyfoo: code-deps
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/src libccalllazyfoo
 
-$(build_shlibdir)/lib%Plugin.$(SHLIB_EXT): $(SRCDIR)/clangsa/%.cpp $(LLVM_CONFIG_ABSOLUTE)
-	@$(call PRINT_CC, $(CXX) -g $(fPIC) -shared -o $@ -DCLANG_PLUGIN -I$(build_includedir) -L$(build_libdir) \
-		$(LLVM_CXXFLAGS) $(CLANG_LDFLAGS) $(CPPFLAGS) $(CXXFLAGS) $(LDFLAGS) $(CXXLDFLAGS) $<)
+code-libccalllazybar: code-deps code-libccalllazyfoo
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/src libccalllazybar
 
-# Throw an error if a proper version of `clang` is not available.
-# Note that for a default install, you will need to have run the following
-# before attempting this static analysis, so that all necessary headers
-# and dependencies are properly installed:
-#   make -C src install-analysis-deps
-ANALYSIS_DEPS := llvm clang llvm-tools libuv utf8proc
+code-libllvmcalltest: code-deps
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/src libllvmcalltest
+
+code-src-release code-src-debug : code-src-% : code-deps CODE_flisp.boot.inc.phony code-cli-%
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/src $*
+
+code-cli-release code-cli-debug: code-cli-% : code-deps
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/cli $*
+
+code-sysimg-ji : code-runtime code-base code-cli-$(CODE_BUILD_MODE) code-src-$(CODE_BUILD_MODE) | $(build_private_libdir)
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT) -f sysimage.mk sysimg-ji CODE_EXECUTABLE='$(CODE_EXECUTABLE)'
+
+code-sysimg-bc : code-runtime code-base code-cli-$(CODE_BUILD_MODE) code-src-$(CODE_BUILD_MODE) | $(build_private_libdir)
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT) -f sysimage.mk sysimg-bc CODE_EXECUTABLE='$(CODE_EXECUTABLE)'
+
+code-sysimg-release code-sysimg-debug : code-sysimg-% : code-sysimg-ji code-src-%
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT) -f sysimage.mk sysimg-$*
+
+code-debug code-release : code-% : code-sysimg-% code-src-% code-symlink code-libccalltest \
+                                      code-libccalllazyfoo code-libccalllazybar code-libllvmcalltest code-base-cache
+
+runtimes-cache-release runtimes-cache-debug : runtimes-cache-% : code-%
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT) -f pkgimage.mk $*
+
+debug release : % : code-% runtimes-cache-%
+
+docs: code-sysimg-$(CODE_BUILD_MODE) runtimes-cache-$(CODE_BUILD_MODE)
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/doc CODE_EXECUTABLE='$(call spawn,$(CODE_EXECUTABLE_$(CODE_BUILD_MODE))) --startup-file=no'
+
+docs-revise:
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/doc CODE_EXECUTABLE='$(call spawn,$(CODE_EXECUTABLE_$(CODE_BUILD_MODE))) --startup-file=no' revise=true
+
+check-whitespace:
+ifneq ($(NO_GIT), 1)
+	@# Append the directory containing the code we just built to the end of `PATH`,
+	@# to give us the best chance of being able to run this check.
+	@PATH="$(PATH):$(dir $(CODE_EXECUTABLE))" code $(call cygpath_w,$(CODEHOME)/contrib/check-whitespace.jl)
+else
+	$(warn "Skipping whitespace check because git is unavailable")
+endif
+
+release-candidate: release testall
+	@$(CODE_EXECUTABLE) $(CODEHOME)/contrib/add_license_to_files.jl #add license headers
+	@#Check documentation
+	@$(CODE_EXECUTABLE) $(CODEHOME)/doc/NEWS-update.jl #Add missing cross-references to NEWS.md
+	@$(MAKE) -C $(BUILDROOT)/doc html doctest=true linkcheck=true
+	@$(MAKE) -C $(BUILDROOT)/doc pdf
+
+	@# Check to see if the above make invocations changed anything important
+	@if [ -n "$$(git status --porcelain)" ]; then \
+		echo "Git repository dirty; Verify and commit changes to the repository, then retry"; \
+		exit 1; \
+	fi
+
+	@#Check that netload tests work
+	@#for test in test/netload/*.jl; do code $$test; if [ $$? -ne 0 ]; then exit 1; fi; done
+	@echo
+	@echo To complete the release candidate checklist:
+	@echo
+
+	@echo 1. Remove deprecations in base/deprecated.jl
+	@echo 2. Update references to the code version in the source directories, such as in README.md
+	@echo 3. Bump VERSION
+	@echo 4. Increase SOMAJOR and SOMINOR if needed.
+	@echo 5. Update SPDX document by running the script contrib/updateSPDX.jl
+	@echo 6. Create tag, push to github "\(git tag v\`cat VERSION\` && git push --tags\)"		#"` # These comments deal with incompetent syntax highlighting rules
+	@echo 7. Clean out old .tar.gz files living in deps/, "\`git clean -fdx\`" seems to work	#"`
+	@echo 8. Replace github release tarball with tarballs created from make light-source-dist and make full-source-dist with USE_BINARYBUILDER=0
+	@echo 9. Check that 'make && make install && make test' succeed with unpacked tarballs even without Internet access.
+	@echo 10. Follow packaging instructions in doc/src/devdocs/build/distributing.md to create binary packages for all platforms
+	@echo 11. Update checksums on AWS for tarball and packaged binaries
+	@echo 12. Update versions.json. Wait at least 60 minutes before proceeding to step 14.
+	@echo 13. Push to Codeup (https://github.com/CodeLang/codeup/wiki/Adding-a-Code-version)
+	@echo 14. Announce on mailing lists
+	@echo 15. Change master to release-0.X in base/version.jl and base/version_git.sh as in 4cb1e20
+	@echo
+
+$(build_man1dir)/code.1: $(CODEHOME)/doc/man/code.1 | $(build_man1dir)
+	@echo Copying in usr/share/man/man1/code.1
+	@mkdir -p $(build_man1dir)
+	@cp $< $@
+
+$(build_sysconfdir)/code/startup.jl: $(CODEHOME)/etc/startup.jl | $(build_sysconfdir)/code
+	@echo Creating usr/etc/code/startup.jl
+	@cp $< $@
+
+$(build_datarootdir)/code/code-config.jl: $(CODEHOME)/contrib/code-config.jl | $(build_datarootdir)/code
+	$(INSTALL_M) $< $(dir $@)
+
+$(build_depsbindir)/stringreplace: $(CODEHOME)/contrib/stringreplace.c | $(build_depsbindir)
+	@$(call PRINT_CC, $(HOSTCC) -o $(build_depsbindir)/stringreplace $(CODEHOME)/contrib/stringreplace.c)
+
+code-base-cache: code-sysimg-$(CODE_BUILD_MODE) | $(DIRS) $(build_datarootdir)/code
+	@CODE_BINDIR=$(call cygpath_w,$(build_bindir)) CODE_FALLBACK_REPL=1 WINEPATH="$(call cygpath_w,$(build_bindir));$$WINEPATH" \
+		$(call spawn, $(CODE_EXECUTABLE) --startup-file=no $(call cygpath_w,$(CODEHOME)/contrib/write_base_cache.jl) \
+		$(call cygpath_w,$(build_datarootdir)/code/base.cache))
+
+# public libraries, that are installed in $(prefix)/lib
+ifeq ($(CODE_BUILD_MODE),release)
+JL_TARGETS := code
+else ifeq ($(CODE_BUILD_MODE),debug)
+JL_TARGETS := code-debug
+endif
+
+# private libraries, that are installed in $(prefix)/lib/code
+JL_PRIVATE_LIBS-0 := libccalltest libccalllazyfoo libccalllazybar libllvmcalltest
+ifeq ($(CODE_BUILD_MODE),release)
+JL_PRIVATE_LIBS-0 += libcode-internal libcode-codegen
+else ifeq ($(CODE_BUILD_MODE),debug)
+JL_PRIVATE_LIBS-0 += libcode-internal-debug libcode-codegen-debug
+endif
+ifeq ($(USE_GPL_LIBS), 1)
+JL_PRIVATE_LIBS-$(USE_SYSTEM_LIBSUITESPARSE) += libamd libbtf libcamd libccolamd libcholmod libcolamd libklu libldl librbio libspqr libsuitesparseconfig libumfpack
+endif
+JL_PRIVATE_LIBS-$(USE_SYSTEM_LIBBLASTRAMPOLINE) += libblastrampoline
+JL_PRIVATE_LIBS-$(USE_SYSTEM_PCRE) += libpcre2-8
+JL_PRIVATE_LIBS-$(USE_SYSTEM_DSFMT) += libdSFMT
+JL_PRIVATE_LIBS-$(USE_SYSTEM_GMP) += libgmp libgmpxx
+JL_PRIVATE_LIBS-$(USE_SYSTEM_MPFR) += libmpfr
+JL_PRIVATE_LIBS-$(USE_SYSTEM_LIBSSH2) += libssh2
+JL_PRIVATE_LIBS-$(USE_SYSTEM_NGHTTP2) += libnghttp2
+JL_PRIVATE_LIBS-$(USE_SYSTEM_MBEDTLS) += libmbedtls libmbedcrypto libmbedx509
+JL_PRIVATE_LIBS-$(USE_SYSTEM_CURL) += libcurl
+JL_PRIVATE_LIBS-$(USE_SYSTEM_LIBGIT2) += libgit2
+JL_PRIVATE_LIBS-$(USE_SYSTEM_LIBUV) += libuv
+ifeq ($(OS),WINNT)
+JL_PRIVATE_LIBS-$(USE_SYSTEM_ZLIB) += zlib
+else
+JL_PRIVATE_LIBS-$(USE_SYSTEM_ZLIB) += libz
+endif
+ifeq ($(USE_LLVM_SHLIB),1)
+JL_PRIVATE_LIBS-$(USE_SYSTEM_LLVM) += libLLVM $(LLVM_SHARED_LIB_NAME)
+endif
+JL_PRIVATE_LIBS-$(USE_SYSTEM_LIBUNWIND) += libunwind
+
+ifeq ($(USE_SYSTEM_LIBM),0)
+JL_PRIVATE_LIBS-$(USE_SYSTEM_OPENLIBM) += libopenlibm
+endif
+
+JL_PRIVATE_LIBS-$(USE_SYSTEM_BLAS) += $(LIBBLASNAME)
+ifneq ($(LIBLAPACKNAME),$(LIBBLASNAME))
+JL_PRIVATE_LIBS-$(USE_SYSTEM_LAPACK) += $(LIBLAPACKNAME)
+endif
+
+JL_PRIVATE_LIBS-$(USE_SYSTEM_CSL) += libgfortran libquadmath libstdc++ libgcc_s libgomp libssp libatomic
 ifeq ($(OS),Darwin)
-ANALYSIS_DEPS += llvmunwind
-else ifeq ($(OS),OpenBSD)
-ANALYSIS_DEPS += llvmunwind
-else ifneq ($(OS),WINNT)
-ANALYSIS_DEPS += unwind
+JL_PRIVATE_LIBS-$(USE_SYSTEM_CSL) += libc++
 endif
-install-analysis-deps:
-	$(MAKE) -C $(CODEHOME)/deps $(addprefix install-,$(ANALYSIS_DEPS))
-
-analyzegc-deps-check: $(BUILDDIR)/language_version.h $(BUILDDIR)/language_flisp.boot.inc $(BUILDDIR)/language_internal_funcs.inc
-ifeq ($(USE_BINARYBUILDER_LLVM),0)
-ifneq ($(BUILD_LLVM_CLANG),1)
-	$(error Clang must be available to use the clang analyzer. Either build it (BUILD_LLVM_CLANG=1) or use BinaryBuilder)
+ifeq ($(OS),WINNT)
+JL_PRIVATE_LIBS-$(USE_SYSTEM_CSL) += libwinpthread
+else
+JL_PRIVATE_LIBS-$(USE_SYSTEM_CSL) += libpthread
+endif
+ifeq ($(SANITIZE),1)
+ifeq ($(USECLANG),1)
+JL_PRIVATE_LIBS-1 += libclang_rt.asan
+else
+JL_PRIVATE_LIBS-1 += libasan
 endif
 endif
 
-clangsa: $(build_shlibdir)/libGCCheckerPlugin.$(SHLIB_EXT)
-clangsa: $(build_shlibdir)/libImplicitAtomicsPlugin.$(SHLIB_EXT)
+ifeq ($(WITH_TRACY),1)
+JL_PRIVATE_LIBS-0 += libTracyClient
+endif
 
-# optarg is a required_argument for these
-SA_EXCEPTIONS-jloptions.c                   := -Xanalyzer -analyzer-config -Xanalyzer silence-checkers="core.NonNullParamChecker;unix.cstring.NullArg"
- # clang doesn't understand that e->vars has the same value in save_env (NULL) and restore_env (assumed non-NULL)
-SA_EXCEPTIONS-subtype.c                     := -Xanalyzer -analyzer-config -Xanalyzer silence-checkers="core.uninitialized.Assign;core.UndefinedBinaryOperatorResult"
-SA_EXCEPTIONS-codegen.c                     := -Xanalyzer -analyzer-config -Xanalyzer silence-checkers="core"
- # these need to be annotated (and possibly fixed)
-SKIP_GC_CHECK := codegen.cpp rtutils.c
 
-# make sure LLVM's invariant information is not discarded with -DNDEBUG
-clang-sagc-%: LANGUAGE_CXXFLAGS += -UNDEBUG
-clang-sagc-%: $(SRCDIR)/%.c $(build_shlibdir)/libGCCheckerPlugin.$(SHLIB_EXT) .FORCE | analyzegc-deps-check
-	@$(call PRINT_ANALYZE, $(build_depsbindir)/clang -D__clang_gcanalyzer__ --analyze -Xanalyzer -analyzer-werror -Xanalyzer -analyzer-output=text --analyzer-no-default-checks \
-		-Xclang -load -Xclang $(build_shlibdir)/libGCCheckerPlugin.$(SHLIB_EXT) -Xclang -analyzer-checker=core$(COMMA)code.GCChecker \
-		$(SA_EXCEPTIONS-$(notdir $<)) \
-		$(CLANGSA_FLAGS) $(JCPPFLAGS_CLANG) $(JCFLAGS_CLANG) $(LANGUAGE_CFLAGS) $(DEBUGFLAGS_CLANG) -fcolor-diagnostics -x c $<)
-clang-sagc-%: $(SRCDIR)/%.cpp $(build_shlibdir)/libGCCheckerPlugin.$(SHLIB_EXT) .FORCE | analyzegc-deps-check
-	@$(call PRINT_ANALYZE, $(build_depsbindir)/clang -D__clang_gcanalyzer__ --analyze -Xanalyzer -analyzer-werror -Xanalyzer -analyzer-output=text --analyzer-no-default-checks \
-		-Xclang -load -Xclang $(build_shlibdir)/libGCCheckerPlugin.$(SHLIB_EXT) -Xclang -analyzer-checker=core$(COMMA)code.GCChecker \
-		$(SA_EXCEPTIONS-$(notdir $<)) \
-		$(CLANGSA_FLAGS) $(CLANGSA_CXXFLAGS) $(LLVM_CXXFLAGS) $(JCPPFLAGS_CLANG) $(JCXXFLAGS_CLANG) $(LANGUAGE_CXXFLAGS) $(DEBUGFLAGS_CLANG) -fcolor-diagnostics -x c++ $<)
+ifeq ($(OS),Darwin)
+ifeq ($(USE_SYSTEM_BLAS),1)
+ifeq ($(USE_SYSTEM_LAPACK),0)
+JL_PRIVATE_LIBS-0 += libgfortblas
+endif
+endif
+endif
 
-clang-sa-%: LANGUAGE_CXXFLAGS += -UNDEBUG
-clang-sa-%: $(SRCDIR)/%.c .FORCE | analyzegc-deps-check
-	@$(call PRINT_ANALYZE, $(build_depsbindir)/clang --analyze -Xanalyzer -analyzer-werror -Xanalyzer -analyzer-output=text \
-		-Xanalyzer -analyzer-disable-checker=deadcode.DeadStores \
-		$(SA_EXCEPTIONS-$(notdir $<)) \
-		$(CLANGSA_FLAGS) $(JCPPFLAGS_CLANG) $(JCFLAGS_CLANG) $(LANGUAGE_CFLAGS) $(DEBUGFLAGS_CLANG) -fcolor-diagnostics -Werror -x c $<)
-clang-sa-%: $(SRCDIR)/%.cpp .FORCE | analyzegc-deps-check
-	@$(call PRINT_ANALYZE, $(build_depsbindir)/clang --analyze -Xanalyzer -analyzer-werror -Xanalyzer -analyzer-output=text \
-		-Xanalyzer -analyzer-disable-checker=deadcode.DeadStores \
-		$(SA_EXCEPTIONS-$(notdir $<)) \
-		$(CLANGSA_FLAGS) $(CLANGSA_CXXFLAGS) $(LLVM_CXXFLAGS) $(JCPPFLAGS_CLANG) $(JCXXFLAGS_CLANG) $(LANGUAGE_CXXFLAGS) $(DEBUGFLAGS_CLANG) -fcolor-diagnostics -Werror -x c++ $<)
+# Note that we disable MSYS2's path munging here, as otherwise
+# it replaces our `:`-separated list as a `;`-separated one.
+define stringreplace
+	MSYS2_ARG_CONV_EXCL='*' $(build_depsbindir)/stringreplace $$(strings -t x - '$1' | grep "$2" | awk '{print $$1;}') "$3" 255 "$(call cygpath_w,$1)"
+endef
 
-clang-tidy-%: $(SRCDIR)/%.c $(build_shlibdir)/libImplicitAtomicsPlugin.$(SHLIB_EXT) .FORCE | analyzegc-deps-check
-	@$(call PRINT_ANALYZE, $(build_depsbindir)/clang-tidy $< -header-filter='.*' --quiet \
-		-load $(build_shlibdir)/libImplicitAtomicsPlugin.$(SHLIB_EXT) --checks='-clang-analyzer-*$(COMMA)-clang-diagnostic-*$(COMMA)concurrency-implicit-atomics' --warnings-as-errors='*' \
-		-- $(CLANGSA_FLAGS) $(JCPPFLAGS_CLANG) $(JCFLAGS_CLANG) $(LANGUAGE_CFLAGS) $(DEBUGFLAGS_CLANG) -fcolor-diagnostics -fno-caret-diagnostics -x c)
-clang-tidy-%: $(SRCDIR)/%.cpp $(build_shlibdir)/libImplicitAtomicsPlugin.$(SHLIB_EXT) .FORCE | analyzegc-deps-check
-	@$(call PRINT_ANALYZE, $(build_depsbindir)/clang-tidy $< -header-filter='.*' --quiet \
-		-load $(build_shlibdir)/libImplicitAtomicsPlugin.$(SHLIB_EXT) --checks='-clang-analyzer-*$(COMMA)-clang-diagnostic-*$(COMMA)concurrency-implicit-atomics' --warnings-as-errors='*' \
-		-- $(CLANGSA_FLAGS) $(CLANGSA_CXXFLAGS) $(LLVM_CXXFLAGS) $(JCPPFLAGS_CLANG) $(JCXXFLAGS_CLANG) $(LANGUAGE_CXXFLAGS) $(DEBUGFLAGS_CLANG) -fcolor-diagnostics --system-header-prefix=llvm -Wno-deprecated-declarations -fno-caret-diagnostics -x c++)
 
-# set the exports for the source files based on where they are getting linked
-$(addprefix clang-sa-,$(SRCS)):      DEBUGFLAGS_CLANG += -DLANGUAGE_LIBRARY_EXPORTS_INTERNAL
-$(addprefix clang-sagc-,$(SRCS)):    DEBUGFLAGS_CLANG += -DLANGUAGE_LIBRARY_EXPORTS_INTERNAL
-$(addprefix clang-tidy-,$(SRCS)):    DEBUGFLAGS_CLANG += -DLANGUAGE_LIBRARY_EXPORTS_INTERNAL
-$(addprefix clang-sa-,$(CODEGEN_SRCS)):   DEBUGFLAGS_CLANG += -DLANGUAGE_LIBRARY_EXPORTS_CODEGEN
-$(addprefix clang-sagc-,$(CODEGEN_SRCS)): DEBUGFLAGS_CLANG += -DLANGUAGE_LIBRARY_EXPORTS_CODEGEN
-$(addprefix clang-tidy-,$(CODEGEN_SRCS)): DEBUGFLAGS_CLANG += -DLANGUAGE_LIBRARY_EXPORTS_CODEGEN
+install: $(build_depsbindir)/stringreplace $(BUILDROOT)/doc/_build/html/en/index.html
+	@$(MAKE) $(QUIET_MAKE) $(CODE_BUILD_MODE)
+	@for subdir in $(bindir) $(datarootdir)/code/runtime/$(VERSDIR) $(docdir) $(man1dir) $(includedir)/code $(libdir) $(private_libdir) $(sysconfdir) $(private_libexecdir); do \
+		mkdir -p $(DESTDIR)$$subdir; \
+	done
 
-# Add C files as a target of `analyzesrc` and `analyzegc` and `tidysrc`
-tidysrc: $(addprefix clang-tidy-,$(CODEGEN_SRCS) $(SRCS))
-analyzesrc: $(addprefix clang-sa-,$(CODEGEN_SRCS) $(SRCS))
-analyzegc: $(addprefix clang-sagc-,$(filter-out $(basename $(SKIP_GC_CHECK)),$(CODEGEN_SRCS) $(SRCS)))
-analyze: analyzesrc analyzegc tidysrc
+	$(INSTALL_M) $(CODE_EXECUTABLE_$(CODE_BUILD_MODE)) $(DESTDIR)$(bindir)/
+ifeq ($(OS),WINNT)
+	-$(INSTALL_M) $(wildcard $(build_bindir)/*.dll) $(DESTDIR)$(bindir)/
+ifeq ($(CODE_BUILD_MODE),release)
+	-$(INSTALL_M) $(build_libdir)/libcode.dll.a $(DESTDIR)$(libdir)/
+	-$(INSTALL_M) $(build_libdir)/libcode-internal.dll.a $(DESTDIR)$(libdir)/
+else ifeq ($(CODE_BUILD_MODE),debug)
+	-$(INSTALL_M) $(build_libdir)/libcode-debug.dll.a $(DESTDIR)$(libdir)/
+	-$(INSTALL_M) $(build_libdir)/libcode-internal-debug.dll.a $(DESTDIR)$(libdir)/
+endif
+	-$(INSTALL_M) $(wildcard $(build_private_libdir)/*.a) $(DESTDIR)$(private_libdir)/
+	-rm -f $(DESTDIR)$(private_libdir)/sys-o.a
 
-clean-analyzegc:
-	rm -f $(build_shlibdir)/libGCCheckerPlugin.$(SHLIB_EXT)
-	rm -f $(build_shlibdir)/libImplicitAtomicsPlugin.$(SHLIB_EXT)
+	# We have a single exception; we want 7z.dll to live in private_libexecdir,
+	# not bindir, so that 7z.exe can find it.
+	-mv $(DESTDIR)$(bindir)/7z.dll $(DESTDIR)$(private_libexecdir)/
+	-$(INSTALL_M) $(build_bindir)/libopenlibm.dll.a $(DESTDIR)$(libdir)/
+	-$(INSTALL_M) $(build_libdir)/libssp.dll.a $(DESTDIR)$(libdir)/
+else
+
+# Copy over .dSYM directories directly for Darwin
+ifneq ($(DARWIN_FRAMEWORK),1)
+ifeq ($(OS),Darwin)
+ifeq ($(CODE_BUILD_MODE),release)
+	-cp -a $(build_libdir)/libcode.*.dSYM $(DESTDIR)$(libdir)
+	-cp -a $(build_libdir)/libcode-internal.*.dSYM $(DESTDIR)$(private_libdir)
+	-cp -a $(build_libdir)/libcode-codegen.*.dSYM $(DESTDIR)$(private_libdir)
+	-cp -a $(build_private_libdir)/sys.dylib.dSYM $(DESTDIR)$(private_libdir)
+else ifeq ($(CODE_BUILD_MODE),debug)
+	-cp -a $(build_libdir)/libcode-debug.*.dSYM $(DESTDIR)$(libdir)
+	-cp -a $(build_libdir)/libcode-internal-debug.*.dSYM $(DESTDIR)$(private_libdir)
+	-cp -a $(build_libdir)/libcode-codegen-debug.*.dSYM $(DESTDIR)$(private_libdir)
+	-cp -a $(build_private_libdir)/sys-debug.dylib.dSYM $(DESTDIR)$(private_libdir)
+endif
+endif
+
+# Copy over shared library file for libcode.*
+	for suffix in $(JL_TARGETS) ; do \
+		for lib in $(build_libdir)/lib$${suffix}.*$(SHLIB_EXT)*; do \
+			if [ "$${lib##*.}" != "dSYM" ]; then \
+				$(INSTALL_M) $$lib $(DESTDIR)$(libdir) ; \
+			fi \
+		done \
+	done
+else
+# libcode in Darwin framework has special location and name
+ifeq ($(CODE_BUILD_MODE),release)
+	$(INSTALL_M) $(build_libdir)/libcode.$(SOMAJOR).$(SOMINOR).dylib $(DESTDIR)$(prefix)/$(framework_dylib)
+	@$(DSYMUTIL) -o $(DESTDIR)$(prefix)/$(framework_resources)/$(FRAMEWORK_NAME).dSYM $(DESTDIR)$(prefix)/$(framework_dylib)
+	@$(DSYMUTIL) -o $(DESTDIR)$(prefix)/$(framework_resources)/sys.dylib.dSYM $(build_private_libdir)/sys.dylib
+else ifeq ($(CODE_BUILD_MODE),debug)
+	$(INSTALL_M) $(build_libdir)/libcode-debug.$(SOMAJOR).$(SOMINOR).dylib $(DESTDIR)$(prefix)/$(framework_dylib)_debug
+	@$(DSYMUTIL) -o $(DESTDIR)$(prefix)/$(framework_resources)/$(FRAMEWORK_NAME)_debug.dSYM $(DESTDIR)$(prefix)/$(framework_dylib)_debug
+	@$(DSYMUTIL) -o $(DESTDIR)$(prefix)/$(framework_resources)/sys-debug.dylib.dSYM $(build_private_libdir)/sys-debug.dylib
+endif
+endif
+
+	for suffix in $(JL_PRIVATE_LIBS-0) ; do \
+		for lib in $(build_libdir)/$${suffix}.*$(SHLIB_EXT)*; do \
+			if [ "$${lib##*.}" != "dSYM" ]; then \
+				$(INSTALL_M) $$lib $(DESTDIR)$(private_libdir) ; \
+			fi \
+		done \
+	done
+	for suffix in $(JL_PRIVATE_LIBS-1) ; do \
+		for lib in $(build_private_libdir)/$${suffix}.$(SHLIB_EXT)*; do \
+			if [ "$${lib##*.}" != "dSYM" ]; then \
+				$(INSTALL_M) $$lib $(DESTDIR)$(private_libdir) ; \
+			fi \
+		done \
+	done
+endif
+	# Install `7z` into private_libexecdir
+	$(INSTALL_M) $(build_bindir)/7z$(EXE) $(DESTDIR)$(private_libexecdir)/
+
+	# Install `lld` into private_libexecdir
+	$(INSTALL_M) $(build_depsbindir)/lld$(EXE) $(DESTDIR)$(private_libexecdir)/
+
+	# Install `dsymutil` into private_libexecdir/
+	$(INSTALL_M) $(build_depsbindir)/dsymutil$(EXE) $(DESTDIR)$(private_libexecdir)/
+
+	# Copy public headers
+	cp -R -L $(build_includedir)/code/* $(DESTDIR)$(includedir)/code
+	# Copy system image
+ifeq ($(CODE_BUILD_MODE),release)
+	$(INSTALL_M) $(build_private_libdir)/sys.$(SHLIB_EXT) $(DESTDIR)$(private_libdir)
+else ifeq ($(CODE_BUILD_MODE),debug)
+	$(INSTALL_M) $(build_private_libdir)/sys-debug.$(SHLIB_EXT) $(DESTDIR)$(private_libdir)
+endif
+
+	# Copy in all .jl sources as well
+	mkdir -p $(DESTDIR)$(datarootdir)/code/base $(DESTDIR)$(datarootdir)/code/test
+	cp -R -L $(CODEHOME)/base/* $(DESTDIR)$(datarootdir)/code/base
+	cp -R -L $(CODEHOME)/test/* $(DESTDIR)$(datarootdir)/code/test
+	cp -R -L $(build_datarootdir)/code/* $(DESTDIR)$(datarootdir)/code
+	# Copy documentation
+	cp -R -L $(BUILDROOT)/doc/_build/html $(DESTDIR)$(docdir)/
+	# Remove various files which should not be installed
+	-rm -f $(DESTDIR)$(datarootdir)/code/base/version_git.sh
+	-rm -f $(DESTDIR)$(datarootdir)/code/test/Makefile
+	-rm -f $(DESTDIR)$(datarootdir)/code/base/*/source-extracted
+	-rm -f $(DESTDIR)$(datarootdir)/code/base/*/build-configured
+	-rm -f $(DESTDIR)$(datarootdir)/code/base/*/build-compiled
+	-rm -f $(DESTDIR)$(datarootdir)/code/base/*/build-checked
+	-rm -f $(DESTDIR)$(datarootdir)/code/runtime/$(VERSDIR)/*/source-extracted
+	-rm -f $(DESTDIR)$(datarootdir)/code/runtime/$(VERSDIR)/*/build-configured
+	-rm -f $(DESTDIR)$(datarootdir)/code/runtime/$(VERSDIR)/*/build-compiled
+	-rm -f $(DESTDIR)$(datarootdir)/code/runtime/$(VERSDIR)/*/build-checked
+	# Copy in beautiful new man page
+	$(INSTALL_F) $(build_man1dir)/code.1 $(DESTDIR)$(man1dir)/
+	# Copy .desktop file
+	mkdir -p $(DESTDIR)$(datarootdir)/applications/
+	$(INSTALL_F) $(CODEHOME)/contrib/code.desktop $(DESTDIR)$(datarootdir)/applications/
+	# Install appdata file
+	mkdir -p $(DESTDIR)$(datarootdir)/appdata/
+	$(INSTALL_F) $(CODEHOME)/contrib/code.appdata.xml $(DESTDIR)$(datarootdir)/appdata/
+
+	# Update RPATH entries and JL_SYSTEM_IMAGE_PATH if $(private_libdir_rel) != $(build_private_libdir_rel)
+ifneq ($(private_libdir_rel),$(build_private_libdir_rel))
+ifeq ($(OS), Darwin)
+ifneq ($(DARWIN_FRAMEWORK),1)
+	for j in $(JL_TARGETS) ; do \
+		install_name_tool -rpath @executable_path/$(build_private_libdir_rel) @executable_path/$(private_libdir_rel) $(DESTDIR)$(bindir)/$$j; \
+		install_name_tool -add_rpath @executable_path/$(build_libdir_rel) @executable_path/$(libdir_rel) $(DESTDIR)$(bindir)/$$j; \
+	done
+endif
+else ifneq (,$(findstring $(OS),Linux FreeBSD))
+	for j in $(JL_TARGETS) ; do \
+		$(PATCHELF) $(PATCHELF_SET_RPATH_ARG) '$$ORIGIN/$(private_libdir_rel):$$ORIGIN/$(libdir_rel)' $(DESTDIR)$(bindir)/$$j; \
+	done
+endif
+
+	# Overwrite JL_SYSTEM_IMAGE_PATH in libcode-internal
+	if [ "$(DARWIN_FRAMEWORK)" = "0" ]; then \
+		RELEASE_TARGET=$(DESTDIR)$(private_libdir)/libcode-internal.$(SHLIB_EXT); \
+		DEBUG_TARGET=$(DESTDIR)$(private_libdir)/libcode-internal-debug.$(SHLIB_EXT); \
+	else \
+		RELEASE_TARGET=$(DESTDIR)$(prefix)/$(framework_dylib); \
+		DEBUG_TARGET=$(DESTDIR)$(prefix)/$(framework_dylib)_debug; \
+	fi; \
+	if [ "$(CODE_BUILD_MODE)" = "release" ]; then \
+		$(call stringreplace,$${RELEASE_TARGET},sys.$(SHLIB_EXT)$$,$(private_libdir_rel)/sys.$(SHLIB_EXT)); \
+	elif [ "$(CODE_BUILD_MODE)" = "debug" ]; then \
+		$(call stringreplace,$${DEBUG_TARGET},sys-debug.$(SHLIB_EXT)$$,$(private_libdir_rel)/sys-debug.$(SHLIB_EXT)); \
+	fi;
+endif
+
+	# Set rpath for libcode-internal, which is moving from `../lib` to `../lib/code`.
+ifeq ($(OS), Darwin)
+ifneq ($(DARWIN_FRAMEWORK),1)
+ifeq ($(CODE_BUILD_MODE),release)
+	install_name_tool -add_rpath @loader_path/$(reverse_private_libdir_rel)/ $(DESTDIR)$(private_libdir)/libcode-internal.$(SHLIB_EXT)
+	install_name_tool -add_rpath @loader_path/$(reverse_private_libdir_rel)/ $(DESTDIR)$(private_libdir)/libcode-codegen.$(SHLIB_EXT)
+else ifeq ($(CODE_BUILD_MODE),debug)
+	install_name_tool -add_rpath @loader_path/$(reverse_private_libdir_rel)/ $(DESTDIR)$(private_libdir)/libcode-internal-debug.$(SHLIB_EXT)
+	install_name_tool -add_rpath @loader_path/$(reverse_private_libdir_rel)/ $(DESTDIR)$(private_libdir)/libcode-codegen-debug.$(SHLIB_EXT)
+endif
+endif
+else ifneq (,$(findstring $(OS),Linux FreeBSD))
+ifeq ($(CODE_BUILD_MODE),release)
+	$(PATCHELF) $(PATCHELF_SET_RPATH_ARG) '$$ORIGIN:$$ORIGIN/$(reverse_private_libdir_rel)' $(DESTDIR)$(private_libdir)/libcode-internal.$(SHLIB_EXT)
+	$(PATCHELF) $(PATCHELF_SET_RPATH_ARG) '$$ORIGIN:$$ORIGIN/$(reverse_private_libdir_rel)' $(DESTDIR)$(private_libdir)/libcode-codegen.$(SHLIB_EXT)
+else ifeq ($(CODE_BUILD_MODE),debug)
+	$(PATCHELF) $(PATCHELF_SET_RPATH_ARG) '$$ORIGIN:$$ORIGIN/$(reverse_private_libdir_rel)' $(DESTDIR)$(private_libdir)/libcode-internal-debug.$(SHLIB_EXT)
+	$(PATCHELF) $(PATCHELF_SET_RPATH_ARG) '$$ORIGIN:$$ORIGIN/$(reverse_private_libdir_rel)' $(DESTDIR)$(private_libdir)/libcode-codegen-debug.$(SHLIB_EXT)
+endif
+endif
+
+	# Fix rpaths for dependencies. This should be fixed in BinaryBuilder later.
+ifeq ($(OS), Linux)
+	-$(PATCHELF) $(PATCHELF_SET_RPATH_ARG) '$$ORIGIN' $(DESTDIR)$(private_shlibdir)/libLLVM.$(SHLIB_EXT)
+endif
+ifneq ($(LOADER_BUILD_DEP_LIBS),$(LOADER_INSTALL_DEP_LIBS))
+	# Next, overwrite relative path to libcode-internal in our loader if $$(LOADER_BUILD_DEP_LIBS) != $$(LOADER_INSTALL_DEP_LIBS)
+ifeq ($(CODE_BUILD_MODE),release)
+	$(call stringreplace,$(DESTDIR)$(shlibdir)/libcode.$(JL_MAJOR_MINOR_SHLIB_EXT),$(LOADER_BUILD_DEP_LIBS)$$,$(LOADER_INSTALL_DEP_LIBS))
+else ifeq ($(CODE_BUILD_MODE),debug)
+	$(call stringreplace,$(DESTDIR)$(shlibdir)/libcode-debug.$(JL_MAJOR_MINOR_SHLIB_EXT),$(LOADER_DEBUG_BUILD_DEP_LIBS)$$,$(LOADER_DEBUG_INSTALL_DEP_LIBS))
+endif
+endif
+
+ifeq ($(OS),FreeBSD)
+	# On FreeBSD, remove the build's libdir from each library's RPATH
+	$(CODEHOME)/contrib/fixup-rpath.sh "$(PATCHELF)" $(DESTDIR)$(libdir) $(build_libdir)
+	$(CODEHOME)/contrib/fixup-rpath.sh "$(PATCHELF)" $(DESTDIR)$(private_libdir) $(build_libdir)
+	$(CODEHOME)/contrib/fixup-rpath.sh "$(PATCHELF)" $(DESTDIR)$(bindir) $(build_libdir)
+	# Set libgfortran's RPATH to ORIGIN instead of GCCPATH. It's only libgfortran that
+	# needs to be fixed here, as libgcc_s and libquadmath don't have RPATHs set. If we
+	# don't set libgfortran's RPATH, it won't be able to find its friends on systems
+	# that don't have the exact GCC port installed used for the build.
+	for lib in $(DESTDIR)$(private_libdir)/libgfortran*$(SHLIB_EXT)*; do \
+		$(PATCHELF) $(PATCHELF_SET_RPATH_ARG) '$$ORIGIN' $$lib; \
+	done
+endif
+
+	mkdir -p $(DESTDIR)$(sysconfdir)
+	cp -R $(build_sysconfdir)/code $(DESTDIR)$(sysconfdir)/
+
+ifeq ($(DARWIN_FRAMEWORK),1)
+	$(MAKE) -C $(CODEHOME)/contrib/mac/framework frameworknoinstall
+endif
+
+distclean:
+	-rm -fr $(BUILDROOT)/code-*.tar.gz $(BUILDROOT)/code*.exe $(BUILDROOT)/code-$(CODE_COMMIT)
+
+binary-dist: distclean
+ifeq ($(USE_SYSTEM_BLAS),0)
+ifeq ($(ISX86),1)
+ifneq ($(OPENBLAS_DYNAMIC_ARCH),1)
+	@echo OpenBLAS must be rebuilt with OPENBLAS_DYNAMIC_ARCH=1 to use binary-dist target
+	@false
+endif
+endif
+endif
+
+ifeq ($(USE_BINARYBUILDER_OPENBLAS),0)
+	# https://github.com/CodeLang/code/issues/46579
+	USE_BINARYBUILDER_OBJCONV=0
+endif
+
+ifneq ($(prefix),$(abspath code-$(CODE_COMMIT)))
+	$(error prefix must not be set for make binary-dist)
+endif
+ifneq ($(DESTDIR),)
+	$(error DESTDIR must not be set for make binary-dist)
+endif
+	@$(MAKE) -C $(BUILDROOT) -f $(CODEHOME)/Makefile install
+	cp $(CODEHOME)/LICENSE.md $(BUILDROOT)/code-$(CODE_COMMIT)
+ifeq ($(OS), Linux)
+	# Copy over any bundled ca certs we picked up from the system during build
+	-cp $(build_datarootdir)/code/cert.pem $(DESTDIR)$(datarootdir)/code/
+endif
+ifeq ($(OS), WINNT)
+	cd $(BUILDROOT)/code-$(CODE_COMMIT)/bin && rm -f llvm* llc.exe lli.exe opt.exe LTO.dll bugpoint.exe macho-dump.exe
+endif
+	cd $(BUILDROOT) && $(TAR) zcvf $(CODE_BINARYDIST_FILENAME).tar.gz code-$(CODE_COMMIT)
+
+
+exe:
+	# run Inno Setup to compile installer.
+	# Note that we disable MSYS2 path munging, as it interferes with the `/` options:
+	MSYS2_ARG_CONV_EXCL='*' $(call spawn,$(CODEHOME)/dist-extras/inno/iscc.exe /DAppVersion=$(CODE_VERSION) /DSourceDir="$(call cygpath_w,$(BUILDROOT)/code-$(CODE_COMMIT))" /DRepoDir="$(call cygpath_w,$(CODEHOME))" /F"$(CODE_BINARYDIST_FILENAME)" /O"$(call cygpath_w,$(BUILDROOT))" $(INNO_ARGS) $(call cygpath_w,$(CODEHOME)/contrib/windows/build-installer.iss))
+	chmod a+x "$(BUILDROOT)/$(CODE_BINARYDIST_FILENAME).exe"
+
+app:
+	$(MAKE) -C contrib/mac/app
+	@mv contrib/mac/app/$(CODE_BINARYDIST_FILENAME).dmg $(BUILDROOT)
+
+darwinframework:
+	$(MAKE) -C $(CODEHOME)/contrib/mac/framework
+
+light-source-dist.tmp: $(BUILDROOT)/doc/_build/html/en/index.html
+ifneq ($(BUILDROOT),$(CODEHOME))
+	$(error make light-source-dist does not work in out-of-tree builds)
+endif
+	# Save git information
+	-@$(MAKE) -C $(CODEHOME)/base version_git.jl.phony
+
+	# Create file light-source-dist.tmp to hold all the filenames that go into the tarball
+	echo "base/version_git.jl" > light-source-dist.tmp
+
+	# Download all runtimes and include the tarball filenames in light-source-dist.tmp
+	@$(MAKE) -C runtime getall DEPS_GIT=0 USE_BINARYBUILDER=0
+	-ls runtime/srccache/*.tar.gz >> light-source-dist.tmp
+	-ls runtime/*/StdlibArtifacts.toml >> light-source-dist.tmp
+
+	# Include all git-tracked filenames
+	git ls-files >> light-source-dist.tmp
+
+	# Include documentation filenames
+	find doc/_build/html >> light-source-dist.tmp
+
+# Make tarball with only Code code + runtime tarballs
+light-source-dist: light-source-dist.tmp
+	# Prefix everything with "code-$(commit-sha)/" or "code-$(version)/" and then create tarball
+	# To achieve prefixing, we temporarily create a symlink in the source directory that points back
+	# to the source directory.
+	sed -e "s_.*_code-${CODE_COMMIT}/&_" light-source-dist.tmp > light-source-dist.tmp1
+	ln -s . code-${CODE_COMMIT}
+	tar -cz --no-recursion -T light-source-dist.tmp1 -f code-$(CODE_VERSION)_$(CODE_COMMIT).tar.gz
+	rm code-${CODE_COMMIT}
+
+source-dist:
+	@echo \'source-dist\' target is deprecated: use \'full-source-dist\' instead.
+
+# Make tarball with Code code plus all dependencies
+full-source-dist: light-source-dist.tmp
+	# Get all the dependencies downloaded
+	@$(MAKE) -C deps getall DEPS_GIT=0 USE_BINARYBUILDER=0
+
+	# Create file full-source-dist.tmp to hold all the filenames that go into the tarball
+	cp light-source-dist.tmp full-source-dist.tmp
+	-ls deps/srccache/*.tar.gz deps/srccache/*.tar.bz2 deps/srccache/*.tar.xz deps/srccache/*.tgz deps/srccache/*.zip deps/srccache/*.pem >> full-source-dist.tmp
+
+	# Prefix everything with "code-$(commit-sha)/" or "code-$(version)/" and then create tarball
+	# To achieve prefixing, we temporarily create a symlink in the source directory that points back
+	# to the source directory.
+	sed -e "s_.*_code-${CODE_COMMIT}/&_" full-source-dist.tmp > full-source-dist.tmp1
+	ln -s . code-${CODE_COMMIT}
+	tar -cz --no-recursion -T full-source-dist.tmp1 -f code-$(CODE_VERSION)_$(CODE_COMMIT)-full.tar.gz
+	rm code-${CODE_COMMIT}
+
+clean: | $(CLEAN_TARGETS)
+	@-$(MAKE) -C $(BUILDROOT)/base clean
+	@-$(MAKE) -C $(BUILDROOT)/doc clean
+	@-$(MAKE) -C $(BUILDROOT)/src clean
+	@-$(MAKE) -C $(BUILDROOT)/cli clean
+	@-$(MAKE) -C $(BUILDROOT)/test clean
+	@-$(MAKE) -C $(BUILDROOT)/runtime clean
+	@-$(MAKE) -C $(BUILDROOT) -f pkgimage.mk clean
+	-rm -f $(BUILDROOT)/code
+	-rm -f $(BUILDROOT)/*.tar.gz
+	-rm -f $(build_depsbindir)/stringreplace \
+	   $(BUILDROOT)/light-source-dist.tmp $(BUILDROOT)/light-source-dist.tmp1 \
+	   $(BUILDROOT)/full-source-dist.tmp $(BUILDROOT)/full-source-dist.tmp1
+	-rm -fr $(build_private_libdir)
+# Teporarily add this line to the Makefile to remove extras
+	-rm -fr $(build_datarootdir)/code/extras
+
+cleanall: clean
+	@-$(MAKE) -C $(BUILDROOT)/src clean-flisp clean-support
+	@-$(MAKE) -C $(BUILDROOT)/deps clean-libuv
+	-rm -fr $(build_prefix) $(build_staging)
+
+distcleanall: cleanall
+	@-$(MAKE) -C $(BUILDROOT)/runtime distclean
+	@-$(MAKE) -C $(BUILDROOT)/deps distcleanall
+	@-$(MAKE) -C $(BUILDROOT)/doc cleanall
 
 .FORCE:
-.PHONY: default all debug release clean cleanall clean-* libccalltest libllvmcalltest language_flisp.boot.inc.phony analyzegc analyzesrc .FORCE
+.PHONY: .FORCE default debug release check-whitespace release-candidate \
+	code-debug code-release code-runtime code-deps code-deps-libs \
+	code-cli-release code-cli-debug code-src-release code-src-debug \
+	code-symlink code-base code-sysimg code-sysimg-ji code-sysimg-release code-sysimg-debug \
+	test testall testall1 test \
+	clean distcleanall cleanall $(CLEAN_TARGETS) \
+	run-code run-code-debug run-code-release run \
+	install binary-dist light-source-dist.tmp light-source-dist \
+	dist full-source-dist source-dist
+
+test: check-whitespace $(CODE_BUILD_MODE)
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/test default CODE_BUILD_MODE=$(CODE_BUILD_MODE)
+
+testall: check-whitespace $(CODE_BUILD_MODE)
+	cp $(CODE_SYSIMG) $(BUILDROOT)/local.$(SHLIB_EXT)
+	$(call spawn,$(CODE_EXECUTABLE) -J $(call cygpath_w,$(BUILDROOT)/local.$(SHLIB_EXT)) -e 'true')
+	rm $(BUILDROOT)/local.$(SHLIB_EXT)
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/test all CODE_BUILD_MODE=$(CODE_BUILD_MODE)
+
+testall1: check-whitespace $(CODE_BUILD_MODE)
+	@env CODE_CPU_THREADS=1 $(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/test all CODE_BUILD_MODE=$(CODE_BUILD_MODE)
+
+test-%: check-whitespace $(CODE_BUILD_MODE) .FORCE
+	@([ $$(( $$(date +%s) - $$(date -r $(build_private_libdir)/sys.$(SHLIB_EXT) +%s) )) -le 100 ] && \
+		printf '\033[93m    HINT The system image was recently rebuilt. Are you aware of the test-revise-* targets? See CONTRIBUTING.md. \033[0m\n') || true
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/test $* CODE_BUILD_MODE=$(CODE_BUILD_MODE)
+
+test-revise-%: .FORCE
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/test revise-$* CODE_BUILD_MODE=$(CODE_BUILD_MODE)
+
+# download target for some hardcoded windows dependencies
+.PHONY: win-extras wine_path
+win-extras:
+	@$(MAKE) -C $(BUILDROOT)/deps install-p7zip
+	mkdir -p $(CODEHOME)/dist-extras
+	cd $(CODEHOME)/dist-extras && \
+	$(JLDOWNLOAD) https://www.jrsoftware.org/download.php/is.exe && \
+	chmod a+x is.exe && \
+	MSYS2_ARG_CONV_EXCL='*' $(call spawn, $(CODEHOME)/dist-extras/is.exe /DIR="$(call cygpath_w,$(CODEHOME)/dist-extras/inno)" /PORTABLE=1 /CURRENTUSER /VERYSILENT)
+
+# various statistics about the build that may interest the user
+ifeq ($(USE_SYSTEM_LLVM), 1)
+LLVM_SIZE := llvm-size$(EXE)
+else
+LLVM_SIZE := PATH=$(build_bindir):$$PATH; $(build_depsbindir)/llvm-size$(EXE)
+endif
+build-stats:
+ifeq ($(USE_BINARYBUILDER_LLVM),1)
+	@$(MAKE) -C deps install-llvm-tools
+endif
+	@printf $(JULCOLOR)' ==> ./code binary sizes\n'$(ENDCOLOR)
+	$(call spawn,$(LLVM_SIZE) -A $(call cygpath_w,$(build_private_libdir)/sys.$(SHLIB_EXT)) \
+		$(call cygpath_w,$(build_shlibdir)/libcode.$(SHLIB_EXT)) \
+		$(call cygpath_w,$(build_bindir)/code$(EXE)))
+	@printf $(JULCOLOR)' ==> ./code launch speedtest\n'$(ENDCOLOR)
+	@time $(call spawn,$(build_bindir)/code$(EXE) -e '')
+	@time $(call spawn,$(build_bindir)/code$(EXE) -e '')
+	@time $(call spawn,$(build_bindir)/code$(EXE) -e '')
+
+print-locale:
+	@locale
