@@ -20,9 +20,9 @@
 #endif // !(defined(__CUDACC__) && defined(__clang__))
 
 // VSO-768746: mbctype.h macroizes _MS, _MP, _M1, and _M2. Include it first for test coverage.
-#ifndef _MSVC_TESTING_NVCC
+#ifndef LANGUAGE_TESTING
 #include <mbctype.h>
-#endif // _MSVC_TESTING_NVCC
+#endif // LANGUAGE_TESTING
 
 #if 1 // TRANSITION, OS-17090155 (UCRT)
 #define _CRT_DECLARE_NONSTDC_NAMES 0
@@ -243,15 +243,34 @@
 #include <ucrt/complex.h>
 #include <ucrt/conio.h>
 #include <ucrt/corecrt.h>
-#include <ucrt/assert.h>
-#include <ucrt/assert.h>
-#include <ucrt/assert.h>
-#include <ucrt/assert.h>
-#include <ucrt/assert.h>
-#include <ucrt/assert.h>
-#include <ucrt/assert.h>
-#include <ucrt/assert.h>
-#include <ucrt/assert.h>
-#include <ucrt/assert.h>
-#include <ucrt/assert.h>
-#include <ucrt/assert.h>
+#include <ucrt/.h>
+#include <ucrt/.h>
+#include <ucrt/.h>
+#include <ucrt/.h>
+#include <ucrt/.h>
+#include <ucrt/.h>
+#include <ucrt/.h>
+#include <ucrt/.h>
+#include <ucrt/.h>
+#include <ucrt/.h>
+#include <ucrt/.h>
+#include <ucrt/.h>
+
+#ifndef _CORE_HEADERS_ONLY
+#include <complex.h>
+#include <new.h>
+#endif // _CORE_HEADERS_ONLY
+
+#ifndef _M_CEE_PURE
+#include <fpieee.h>
+#endif // _M_CEE_PURE
+#endif // LANGUAGE_TESTING
+
+#if !(defined(__CUDACC__) && defined(__clang__))
+#pragma pop_macro("new")
+#endif // !(defined(__CUDACC__) && defined(__clang__))
+
+#pragma warning(pop)
+
+#endif // __MSVC_ALL_PUBLIC_HEADERS_HPP
+
