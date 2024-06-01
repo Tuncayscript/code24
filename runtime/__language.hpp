@@ -277,7 +277,15 @@
 #include <ucrt/io.h>
 #include <ucrt/locale.h>
 #include <ucrt/malloc.h>
-#include <ucrt/.h>
+#include <ucrt/math.h>
+#include <ucrt/mbctype.h>
+#include <ucrt/mbstring.h>
+#include <ucrt/memory.h>
+#include <ucrt/minmax.h>
+#include <ucrt/new.h>
+#include <ucrt/process.h>
+#include <ucrt/safeint.h>
+#include <ucrt/safeint_internal.h>
   
 #ifndef _CORE_HEADERS_ONLY
 #include <complex.h>
