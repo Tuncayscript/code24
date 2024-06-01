@@ -1,6 +1,6 @@
-CODEOWNERS @nextech-oss/github-actions
-/.github/ @nextech-oss/github-actions
-/.buildkite/ @nextech-oss/github-actions
+CODEOWNERS @JuliaLang/github-actions
+/.github/ @JuliaLang/github-actions
+/.buildkite/ @JuliaLang/github-actions
 
-/.github/workflows/rerun_failed.yml @Tuncayscript
-/.github/workflows/statuses.yml @Tuncayscript
+/.github/workflows/rerun_failed.yml @DilumAluthge
+/.github/workflows/statuses.yml @DilumAluthge
