@@ -237,25 +237,48 @@
 #include <Object.h>
 #include <Foundation/Foundation.h>
 
-// UCRT 
-
+// Universal C Runtime (UCRT)
+  
+// ucrt/
 #include <ucrt/assert.h>
 #include <ucrt/complex.h>
 #include <ucrt/conio.h>
 #include <ucrt/corecrt.h>
+#include <ucrt/corecrt_io.h>
+#include <ucrt/corecrt_malloc.h>
+#include <ucrt/corecrt_math.h>
+#include <ucrt/corecrt_math_defines.h>
+#include <ucrt/corecrt_memcpy_s.h>
+#include <ucrt/corecrt_memory.h>
+#include <ucrt/corecrt_search.h>
+#include <ucrt/corecrt_share.h>
+#include <ucrt/corecrt_startup.h>
+#include <ucrt/corecrt_stdio_config.h>
+#include <ucrt/corecrt_terminate.h>
+#include <ucrt/corecrt_wconio.h>
+#include <ucrt/corecrt_wctype.h>
+#include <ucrt/corecrt_wdirect.h>
+#include <ucrt/corecrt_wio.h>
+#include <ucrt/corecrt_wprocess.h>
+#include <ucrt/corecrt_wstdio.h>
+#include <ucrt/corecrt_wstdlib.h>
+#include <ucrt/corecrt_wstring.h>
+#include <ucrt/corecrt_wtime.h>
+#include <ucrt/crtdbg.h>
+#include <ucrt/ctype.h>
+#include <ucrt/direct.h>
+#include <ucrt/dos.h>
+#include <ucrt/errno.h>
+#include <ucrt/fcntl.h>
+#include <ucrt/fenv.h>
+#include <ucrt/float.h>
+#include <ucrt/fpieee.h>
+#include <ucrt/inttypes.h>
+#include <ucrt/io.h>
+#include <ucrt/locale.h>
+#include <ucrt/malloc.h>
 #include <ucrt/.h>
-#include <ucrt/.h>
-#include <ucrt/.h>
-#include <ucrt/.h>
-#include <ucrt/.h>
-#include <ucrt/.h>
-#include <ucrt/.h>
-#include <ucrt/.h>
-#include <ucrt/.h>
-#include <ucrt/.h>
-#include <ucrt/.h>
-#include <ucrt/.h>
-
+  
 #ifndef _CORE_HEADERS_ONLY
 #include <complex.h>
 #include <new.h>
