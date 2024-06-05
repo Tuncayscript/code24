@@ -30,7 +30,7 @@
 namespace code {
 namespace runtime {
 
-SWIFT_RUNTIME_STDLIB_SPI
+CODE_RUNTIME_STDLIB_SPI
 const AccessibleFunctionRecord *
 code_findAccessibleFunction(const char *targetNameStart,
                              size_t targetNameLength);
