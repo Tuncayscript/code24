@@ -8,7 +8,7 @@
  * version 2 for more details (a copy is included in the LICENSE file that
  * accompanied this code).
  *
- * Contact with ITGSS, 640 N McCarthy Blvd, in the
+ * Contact with NeXTech, 640 N McCarthy Blvd, in the
  * city of Milpitas, zip code 95035, state of California.
  * or visit www.it-gss.com if you need additional information or have any
  * questions.
