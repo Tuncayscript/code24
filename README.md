@@ -68,7 +68,7 @@ end
 
 ## People behind the Code
 
-* Tunjay Akbarli (Me) - Initial work - tunjayakbarli@it-gss.com
+* Tunjay Akbarli - Initial work - tunjayakbarli@it-gss.com
 * Tural Guliyev - Lead Architect - turalquliyev@it-gss.com
 * Teymur Novruzov - Lead Architect - teymurnovruzov@it-gss.com
 * Mohammed Samy El-Melegy - Compiler Engineer - mohammedsamy@it-gss.com
