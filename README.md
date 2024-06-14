@@ -57,7 +57,8 @@ end
 
 ## Built With
 
-* Ada 2012 - Type System, Safety Features and Reliability
+* Ada 83/2012 - Type System, Safety Features and Reliability
+* Fortran 77 - Legacy Code Integration and Compiler Optimization
 * Assembly - Embedded Systems, Systems Programming
 * Machine Code - Manually adapting language for close-to-the-metal memory and hardware control.
 * Objective-C/C++ - For memory and hardware allocation capabalities
