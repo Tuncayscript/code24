@@ -1,6 +1,6 @@
-# Welcome to Code Programming Language !
+# Welcome to NeXTCode Programming Language !
 
-Code is an innovative programming language that combines the efficiency and speed of Go with the elegance and practicality of Python. It's designed to be fast, safe, and suitable for both systems programming and rapid application development.
+NeXTCode is an innovative programming language that combines the efficiency and speed of Go with the elegance and practicality of Python. It's designed to be fast, safe, and suitable for both systems programming and rapid application development.
 ```
 module Geometry
 
@@ -44,14 +44,14 @@ end
 
 * Speed: Enjoy the performance of Mojo, making your applications run at lightning speed.
 * Multiple Dispatch: Inspired by Julia, Code24 allows for sophisticated function behaviors based on argument types.
-* Practicality: With a syntax as intuitive as Python's, Code24 is easy to learn and practical to use.
+* Practicality: With a syntax as intuitive as Python's, NeXTCode is easy to learn and practical to use.
 * Compilation: Supports both ahead-of-time and just-in-time compilation, similar to Dart, for flexibility in deployment.
-* Null Safety: Borrowing from Swift, Code24 ensures null safety without the need for special syntax like "?" after data types.
-* Expressions: Code24 adopts Kotlin and Rust's approach where most control-flow structures are expressions.
+* Null Safety: Borrowing from Swift, NeXTCode ensures null safety without the need for special syntax like "?" after data types.
+* Expressions: NeXTCode adopts Kotlin and Rust's approach where most control-flow structures are expressions.
 * Collections: Null-safe methods on collections are a feature, taking cues from Swift to prevent common errors.
 * Memory Control: Offers close-to-the-metal memory and hardware control akin to Objective-C, with the safety of Go.
-* Syntax: Code24 uses a Python and C/C++-based syntax that is familiar and easy to understand.
-* Cross-Compiling: Seamlessly use C# and C/C++, R, Ruby, Fortran and many other's libraries within Code24, thanks to its cross-compiling capabilities.
+* Syntax: NeXTCode uses a Python and C/C++-based syntax that is familiar and easy to understand.
+* Cross-Compiling: Seamlessly use C# and C/C++, R, Ruby, Fortran and many other's libraries within NeXTCode, thanks to its cross-compiling capabilities.
 * Interop: Enjoy smooth interoperation with C++ code and libraries.
 * Visibility and Accessibility: Introduces hybrid visibility and accessibility modifiers for classes and subroutines.
 
@@ -82,7 +82,7 @@ end
 
 Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are greatly appreciated.
 
-If you have a suggestion that would make Code24 better, please fork the repo and create a pull request. You can also simply open an issue with the tag “enhancement”.
+If you have a suggestion that would make NeXTCode better, please fork the repo and create a pull request. You can also simply open an issue with the tag “enhancement”.
 
 Don’t forget to give the project a star! Thanks again!
 
