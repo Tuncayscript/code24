@@ -18,7 +18,7 @@
 // About:
 // Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
 //             Tural Ghuliev (turalquliyev@it-gss.com)
-// Date: Monday, June 24, 2024
+// Date: Tuesday, June 25, 2024
 // Technology: C++20 - ISO/IEC 14882:2020(E) 
 
 #include <mutex>
