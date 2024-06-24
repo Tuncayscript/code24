@@ -30,8 +30,8 @@
 #include <llvm/ADT/StringMap.h>
 #include <llvm/Support/raw_ostream.h>
 
-#include "language.h"
-#include "language_internal.h"
+#include "code.h"
+#include "code_internal.h"
 
 using namespace llvm;
 
