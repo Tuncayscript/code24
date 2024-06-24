@@ -8,6 +8,6 @@ This file defines ownership of code in the NeXTech-oss/nextcode repository.
 
 **Specific ownership:**
 
-* Compiler directory: `/compiler/*` @NeXTech-oss/compiler-maintainers
-* Core library directory: `/core/*` @NeXTech-oss/core-maintainers
-* Language server directory: `/language-server/*` @NeXTech-oss/language-server-maintainers
+* Compiler directory: `/compiler/*` @nextech-compiler
+* Core library directory: `/core/*` @nextech-core
+* Language server directory: `/language-server/*` @nextech-language-server
