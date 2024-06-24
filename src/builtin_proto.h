@@ -21,8 +21,8 @@
 // Date: Saturday, June 1, 2024
 // Technology: C++20 - ISO/IEC 14882:2020(E) 
 
-#ifndef CODE_BUILTIN_PROTO_H
-#define CODE_BUILTIN_PROTO_H
+#ifndef LANGUAGE_BUILTIN_PROTO_H
+#define LANGUAGE_BUILTIN_PROTO_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,14 +32,14 @@ extern "C" {
 
 #ifdef DEFINE_BUILTIN_GLOBALS
 #define DECLARE_BUILTIN(name) \
-    CODE_CALLABLE(jl_f_##name); \
-    CODE_DLLEXPORT jl_value_t *jl_builtin_##name; \
-    CODE_DLLEXPORT jl_fptr_args_t jl_f_##name##_addr = &jl_f_##name
+    LANGUAGE_CALLABLE(jl_f_##name); \
+    LANGUAGE_DLLEXPORT jl_value_t *jl_builtin_##name; \
+    LANGUAGE_DLLEXPORT jl_fptr_args_t jl_f_##name##_addr = &jl_f_##name
 #else
 #define DECLARE_BUILTIN(name) \
-    CODE_CALLABLE(jl_f_##name); \
-    CODE_DLLEXPORT extern jl_value_t *jl_builtin_##name; \
-    CODE_DLLEXPORT extern jl_fptr_args_t jl_f_##name##_addr
+    LANGUAGE_CALLABLE(jl_f_##name); \
+    LANGUAGE_DLLEXPORT extern jl_value_t *jl_builtin_##name; \
+    LANGUAGE_DLLEXPORT extern jl_fptr_args_t jl_f_##name##_addr
 #endif
 
 DECLARE_BUILTIN(_apply_iterate);
@@ -94,14 +94,14 @@ DECLARE_BUILTIN(tuple);
 DECLARE_BUILTIN(typeassert);
 DECLARE_BUILTIN(typeof);
 
-CODE_CALLABLE(jl_f__structtype);
-CODE_CALLABLE(jl_f__abstracttype);
-CODE_CALLABLE(jl_f__primitivetype);
-CODE_CALLABLE(jl_f__setsuper);
-CODE_CALLABLE(jl_f__equiv_typedef);
-CODE_CALLABLE(jl_f_get_binding_type);
-CODE_CALLABLE(jl_f__compute_sparams);
-CODE_CALLABLE(jl_f__svec_ref);
+LANGUAGE_CALLABLE(jl_f__structtype);
+LANGUAGE_CALLABLE(jl_f__abstracttype);
+LANGUAGE_CALLABLE(jl_f__primitivetype);
+LANGUAGE_CALLABLE(jl_f__setsuper);
+LANGUAGE_CALLABLE(jl_f__equiv_typedef);
+LANGUAGE_CALLABLE(jl_f_get_binding_type);
+LANGUAGE_CALLABLE(jl_f__compute_sparams);
+LANGUAGE_CALLABLE(jl_f__svec_ref);
 #ifdef __cplusplus
 }
 #endif
