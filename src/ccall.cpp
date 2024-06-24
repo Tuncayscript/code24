@@ -23,7 +23,7 @@
 
 // Mark our stats as being from ccall
 #undef DEBUG_TYPE
-#define DEBUG_TYPE "code_irgen_ccall"
+#define DEBUG_TYPE "language_irgen_ccall"
 
 STATISTIC(RuntimeSymLookups, "Number of runtime symbol lookups emitted");
 STATISTIC(PLTThunks, "Number of PLT Thunks emitted");
@@ -31,32 +31,32 @@ STATISTIC(PLT, "Number of direct PLT entries emitted");
 STATISTIC(EmittedCGlobals, "Number of C globals emitted");
 STATISTIC(EmittedLLVMCalls, "Number of llvmcall intrinsics emitted");
 
-#define _CCALL_STAT(name) code_transformed_ccall__##name
+#define _CCALL_STAT(name) language_transformed_ccall__##name
 #define CCALL_STAT(name) _CCALL_STAT(name)
 #define TRANSFORMED_CCALL_STAT(name) STATISTIC(_CCALL_STAT(name), "Number of " #name " ccalls intercepted")
-TRANSFORMED_CCALL_STAT(code_array_ptr);
-TRANSFORMED_CCALL_STAT(code_value_ptr);
-TRANSFORMED_CCALL_STAT(code_cpu_pause);
-TRANSFORMED_CCALL_STAT(code_cpu_wake);
-TRANSFORMED_CCALL_STAT(code_gc_safepoint);
-TRANSFORMED_CCALL_STAT(code_get_ptls_states);
-TRANSFORMED_CCALL_STAT(code_threadid);
-TRANSFORMED_CCALL_STAT(code_get_tls_world_age);
-TRANSFORMED_CCALL_STAT(code_gc_enable_disable_finalizers_internal);
-TRANSFORMED_CCALL_STAT(code_get_current_task);
-TRANSFORMED_CCALL_STAT(code_set_next_task);
-TRANSFORMED_CCALL_STAT(code_sigatomic_begin);
-TRANSFORMED_CCALL_STAT(code_sigatomic_end);
-TRANSFORMED_CCALL_STAT(code_string_ptr);
-TRANSFORMED_CCALL_STAT(code_symbol_name);
-TRANSFORMED_CCALL_STAT(code_genericmemory_owner);
-TRANSFORMED_CCALL_STAT(code_alloc_genericmemory);
+TRANSFORMED_CCALL_STAT(language_array_ptr);
+TRANSFORMED_CCALL_STAT(language_value_ptr);
+TRANSFORMED_CCALL_STAT(language_cpu_pause);
+TRANSFORMED_CCALL_STAT(language_cpu_wake);
+TRANSFORMED_CCALL_STAT(language_gc_safepoint);
+TRANSFORMED_CCALL_STAT(language_get_ptls_states);
+TRANSFORMED_CCALL_STAT(language_threadid);
+TRANSFORMED_CCALL_STAT(language_get_tls_world_age);
+TRANSFORMED_CCALL_STAT(language_gc_enable_disable_finalizers_internal);
+TRANSFORMED_CCALL_STAT(language_get_current_task);
+TRANSFORMED_CCALL_STAT(language_set_next_task);
+TRANSFORMED_CCALL_STAT(language_sigatomic_begin);
+TRANSFORMED_CCALL_STAT(language_sigatomic_end);
+TRANSFORMED_CCALL_STAT(language_string_ptr);
+TRANSFORMED_CCALL_STAT(language_symbol_name);
+TRANSFORMED_CCALL_STAT(language_genericmemory_owner);
+TRANSFORMED_CCALL_STAT(language_alloc_genericmemory);
 TRANSFORMED_CCALL_STAT(memcpy);
 TRANSFORMED_CCALL_STAT(memset);
 TRANSFORMED_CCALL_STAT(memmove);
-TRANSFORMED_CCALL_STAT(code_object_id);
+TRANSFORMED_CCALL_STAT(language_object_id);
 #undef TRANSFORMED_CCALL_STAT
-extern "C" JL_DLLEXPORT code_value_t *icode_genericmemory_owner(code_genericmemory_t *m JL_PROPAGATES_ROOT) JL_NOTSAFEPOINT;
+extern "C" JL_DLLEXPORT language_value_t *ilanguage_genericmemory_owner(language_genericmemory_t *m JL_PROPAGATES_ROOT) JL_NOTSAFEPOINT;
 
 STATISTIC(EmittedCCalls, "Number of ccalls emitted");
 STATISTIC(DeferredCCallLookups, "Number of ccalls looked up at runtime");
@@ -65,42 +65,42 @@ STATISTIC(RetBoxedCCalls, "Number of ccalls that were retboxed");
 STATISTIC(SRetCCalls, "Number of ccalls that were marked sret");
 
 // somewhat unusual variable, in that aotcompile wants to get the address of this for a sanity check
-GlobalVariable *code_emit_RTLD_DEFAULT_var(Module *M)
+GlobalVariable *language_emit_RTLD_DEFAULT_var(Module *M)
 {
-    return prepare_global_in(M, codeRTLD_DEFAULT_var);
+    return prepare_global_in(M, languageRTLD_DEFAULT_var);
 }
 
 
 // Find or create the GVs for the library and symbol lookup.
 // Return `runtime_lib` (whether the library name is a string)
 // The `lib` and `sym` GV returned may not be in the current module.
-static bool runtime_sym_gvs(code_codectx_t &ctx, const char *f_lib, const char *f_name,
+static bool runtime_sym_gvs(language_languagectx_t &ctx, const char *f_lib, const char *f_name,
                             GlobalVariable *&lib, GlobalVariable *&sym)
 {
     auto M = &ctx.emission_context.shared_module();
     bool runtime_lib = false;
     GlobalVariable *libptrgv;
-    code_codegen_params_t::SymMapGV *symMap;
+    language_languagegen_params_t::SymMapGV *symMap;
     if ((intptr_t)f_lib == (intptr_t)JL_EXE_LIBNAME) {
-        libptrgv = prepare_global_in(M, codeexe_var);
+        libptrgv = prepare_global_in(M, languageexe_var);
         symMap = &ctx.emission_context.symMapExe;
     }
-    else if ((intptr_t)f_lib == (intptr_t)JL_LIBCODE_INTERNAL_DL_LIBNAME) {
-        libptrgv = prepare_global_in(M, codedlli_var);
+    else if ((intptr_t)f_lib == (intptr_t)JL_LIBLANGUAGE_INTERNAL_DL_LIBNAME) {
+        libptrgv = prepare_global_in(M, languagedlli_var);
         symMap = &ctx.emission_context.symMapDlli;
     }
-    else if ((intptr_t)f_lib == (intptr_t)JL_LIBCODE_DL_LIBNAME) {
-        libptrgv = prepare_global_in(M, codedll_var);
+    else if ((intptr_t)f_lib == (intptr_t)JL_LIBLANGUAGE_DL_LIBNAME) {
+        libptrgv = prepare_global_in(M, languagedll_var);
         symMap = &ctx.emission_context.symMapDll;
     }
     else if (f_lib == NULL) {
-        libptrgv = code_emit_RTLD_DEFAULT_var(M);
+        libptrgv = language_emit_RTLD_DEFAULT_var(M);
         symMap = &ctx.emission_context.symMapDefault;
     }
     else {
         std::string name = "ccalllib_";
         name += llvm::sys::path::filename(f_lib);
-        name += std::to_string(code_atomic_fetch_add_relaxed(&globalUniqueGeneratedNames, 1));
+        name += std::to_string(language_atomic_fetch_add_relaxed(&globalUniqueGeneratedNames, 1));
         runtime_lib = true;
         auto &libgv = ctx.emission_context.libMapGV[f_lib];
         if (libgv.first == NULL) {
@@ -120,8 +120,8 @@ static bool runtime_sym_gvs(code_codectx_t &ctx, const char *f_lib, const char *
         std::string name = "ccall_";
         name += f_name;
         name += "_";
-        name += std::to_string(code_atomic_fetch_add_relaxed(&globalUniqueGeneratedNames, 1));
-        auto T_pvoidfunc = CodeType::get_pvoidfunc_ty(M->getContext());
+        name += std::to_string(language_atomic_fetch_add_relaxed(&globalUniqueGeneratedNames, 1));
+        auto T_pvoidfunc = LanguageType::get_pvoidfunc_ty(M->getContext());
         llvmgv = new GlobalVariable(*M, T_pvoidfunc, false,
                                     GlobalVariable::ExternalLinkage,
                                     Constant::getNullValue(T_pvoidfunc), name);
@@ -133,23 +133,23 @@ static bool runtime_sym_gvs(code_codectx_t &ctx, const char *f_lib, const char *
 }
 
 static Value *runtime_sym_lookup(
-        code_codegen_params_t &emission_context,
+        language_languagegen_params_t &emission_context,
         IRBuilder<> &irbuilder,
-        code_codectx_t *ctx,
-        PointerType *funcptype, const char *f_lib, code_value_t *lib_expr,
+        language_languagectx_t *ctx,
+        PointerType *funcptype, const char *f_lib, language_value_t *lib_expr,
         const char *f_name, Function *f,
         GlobalVariable *libptrgv,
         GlobalVariable *llvmgv, bool runtime_lib)
 {
     ++RuntimeSymLookups;
-    // in pseudo-code, this function emits the following:
+    // in pseudo-language, this function emits the following:
     //   global HMODULE *libptrgv
     //   global void **llvmgv
     //   if (*llvmgv == NULL) {
-    //       *llvmgv = code_load_and_lookup(f_lib, f_name, libptrgv);
+    //       *llvmgv = language_load_and_lookup(f_lib, f_name, libptrgv);
     //   }
     //   return (*llvmgv)
-    auto T_pvoidfunc = CodeType::get_pvoidfunc_ty(irbuilder.getContext());
+    auto T_pvoidfunc = LanguageType::get_pvoidfunc_ty(irbuilder.getContext());
     BasicBlock *enter_bb = irbuilder.GetInsertBlock();
     BasicBlock *dlsym_lookup = BasicBlock::Create(irbuilder.getContext(), "dlsym");
     BasicBlock *ccall_bb = BasicBlock::Create(irbuilder.getContext(), "ccall");
@@ -177,8 +177,8 @@ static Value *runtime_sym_lookup(
     Instruction *llvmf;
     Value *nameval = stringConstPtr(emission_context, irbuilder, f_name);
     if (lib_expr) {
-        code_cgval_t libval = emit_expr(*ctx, lib_expr);
-        llvmf = irbuilder.CreateCall(prepare_call_in(code_builderModule(irbuilder), codelazydlsym_func),
+        language_cgval_t libval = emit_expr(*ctx, lib_expr);
+        llvmf = irbuilder.CreateCall(prepare_call_in(language_builderModule(irbuilder), languagelazydlsym_func),
                     { boxed(*ctx, libval), nameval });
     }
     else {
@@ -190,7 +190,7 @@ static Value *runtime_sym_lookup(
             // f_lib is actually one of the special sentinel values
             libname = ConstantExpr::getIntToPtr(ConstantInt::get(emission_context.DL.getIntPtrType(irbuilder.getContext()), (uintptr_t)f_lib), getPointerTy(irbuilder.getContext()));
         }
-        auto lookup = irbuilder.CreateCall(prepare_call_in(code_builderModule(irbuilder), codedlsym_func),
+        auto lookup = irbuilder.CreateCall(prepare_call_in(language_builderModule(irbuilder), languagedlsym_func),
                     { libname, nameval, libptrgv });
         llvmf = lookup;
     }
@@ -209,11 +209,11 @@ static Value *runtime_sym_lookup(
 }
 
 static Value *runtime_sym_lookup(
-        code_codectx_t &ctx,
-        PointerType *funcptype, const char *f_lib, code_value_t *lib_expr,
+        language_languagectx_t &ctx,
+        PointerType *funcptype, const char *f_lib, language_value_t *lib_expr,
         const char *f_name, Function *f)
 {
-    auto T_pvoidfunc = CodeType::get_pvoidfunc_ty(ctx.builder.getContext());
+    auto T_pvoidfunc = LanguageType::get_pvoidfunc_ty(ctx.builder.getContext());
     GlobalVariable *libptrgv;
     GlobalVariable *llvmgv;
     bool runtime_lib;
@@ -225,23 +225,23 @@ static Value *runtime_sym_lookup(
         std::string gvname = "libname_";
         gvname += f_name;
         gvname += "_";
-        gvname += std::to_string(code_atomic_fetch_add_relaxed(&globalUniqueGeneratedNames, 1));
-        llvmgv = new GlobalVariable(*code_Module, T_pvoidfunc, false,
+        gvname += std::to_string(language_atomic_fetch_add_relaxed(&globalUniqueGeneratedNames, 1));
+        llvmgv = new GlobalVariable(*language_Module, T_pvoidfunc, false,
                                     GlobalVariable::ExternalLinkage,
                                     Constant::getNullValue(T_pvoidfunc), gvname);
     }
     else {
         runtime_lib = runtime_sym_gvs(ctx, f_lib, f_name, libptrgv, llvmgv);
-        libptrgv = prepare_global_in(code_Module, libptrgv);
+        libptrgv = prepare_global_in(language_Module, libptrgv);
     }
-    llvmgv = prepare_global_in(code_Module, llvmgv);
+    llvmgv = prepare_global_in(language_Module, llvmgv);
     return runtime_sym_lookup(ctx.emission_context, ctx.builder, &ctx, funcptype, f_lib, lib_expr, f_name, f, libptrgv, llvmgv, runtime_lib);
 }
 
 // Emit a "PLT" entry that will be lazily initialized
 // when being called the first time.
 static GlobalVariable *emit_plt_thunk(
-        code_codectx_t &ctx,
+        language_languagectx_t &ctx,
         FunctionType *functype, const AttributeList &attrs,
         CallingConv::ID cc, const char *f_lib, const char *f_name,
         GlobalVariable *libptrgv, GlobalVariable *llvmgv,
@@ -253,24 +253,24 @@ static GlobalVariable *emit_plt_thunk(
     libptrgv = prepare_global_in(M, libptrgv);
     llvmgv = prepare_global_in(M, llvmgv);
     std::string fname;
-    raw_string_ostream(fname) << "codeplt_" << f_name << "_" << code_atomic_fetch_add_relaxed(&globalUniqueGeneratedNames, 1);
+    raw_string_ostream(fname) << "languageplt_" << f_name << "_" << language_atomic_fetch_add_relaxed(&globalUniqueGeneratedNames, 1);
     Function *plt = Function::Create(functype,
                                      GlobalVariable::PrivateLinkage,
                                      fname, M);
     plt->setAttributes(attrs);
     if (cc != CallingConv::C)
         plt->setCallingConv(cc);
-    auto T_pvoidfunc = CodeType::get_pvoidfunc_ty(M->getContext());
+    auto T_pvoidfunc = LanguageType::get_pvoidfunc_ty(M->getContext());
     GlobalVariable *got = new GlobalVariable(*M, T_pvoidfunc, false,
                                              GlobalVariable::ExternalLinkage,
                                              plt,
                                              fname + "_got");
     if (runtime_lib) {
-        got->addAttribute("code.libname", f_lib);
+        got->addAttribute("language.libname", f_lib);
     } else {
-        got->addAttribute("code.libidx", std::to_string((uintptr_t) f_lib));
+        got->addAttribute("language.libidx", std::to_string((uintptr_t) f_lib));
     }
-    got->addAttribute("code.fname", f_name);
+    got->addAttribute("language.fname", f_name);
     BasicBlock *b0 = BasicBlock::Create(M->getContext(), "top", plt);
     IRBuilder<> irbuilder(b0);
     Value *ptr = runtime_sym_lookup(ctx.emission_context, irbuilder, NULL, funcptype, f_lib, NULL, f_name, plt, libptrgv,
@@ -300,7 +300,7 @@ static GlobalVariable *emit_plt_thunk(
         // Known failures includes vararg (not needed here) and sret.
         if (ctx.emission_context.TargetTriple.isX86() || (ctx.emission_context.TargetTriple.isAArch64() && !ctx.emission_context.TargetTriple.isOSDarwin())) {
             // Ref https://bugs.llvm.org/show_bug.cgi?id=47058
-            // LLVM, as of 10.0.1 emits wrong/worse code when musttail is set
+            // LLVM, as of 10.0.1 emits wrong/worse language when musttail is set
             // Apple silicon macs give an LLVM ERROR if musttail is set here #44107.
             if (!attrs.hasAttrSomewhere(Attribute::ByVal))
                 ret->setTailCallKind(CallInst::TCK_MustTail);
@@ -318,7 +318,7 @@ static GlobalVariable *emit_plt_thunk(
 }
 
 static Value *emit_plt(
-        code_codectx_t &ctx,
+        language_languagectx_t &ctx,
         FunctionType *functype,
         const AttributeList &attrs,
         CallingConv::ID cc, const char *f_lib, const char *f_name)
@@ -338,7 +338,7 @@ static Value *emit_plt(
         sharedgot = emit_plt_thunk(ctx,
                 functype, attrs, cc, f_lib, f_name, libptrgv, llvmgv, runtime_lib);
     }
-    GlobalVariable *got = prepare_global_in(code_Module, sharedgot);
+    GlobalVariable *got = prepare_global_in(language_Module, sharedgot);
     LoadInst *got_val = ctx.builder.CreateAlignedLoad(got->getValueType(), got, Align(sizeof(void*)));
     setName(ctx.emission_context, got_val, f_name);
     // See comment in `runtime_sym_lookup` above. This in principle needs a
@@ -355,28 +355,28 @@ static Value *emit_plt(
 class AbiLayout {
 public:
     virtual ~AbiLayout() {}
-    virtual bool use_sret(code_datatype_t *ty, LLVMContext &ctx) = 0;
-    virtual bool needPassByRef(code_datatype_t *ty, AttrBuilder&, LLVMContext &ctx, Type* llvm_t) = 0;
-    virtual Type *preferred_llvm_type(code_datatype_t *ty, bool isret, LLVMContext &ctx) const = 0;
+    virtual bool use_sret(language_datatype_t *ty, LLVMContext &ctx) = 0;
+    virtual bool needPassByRef(language_datatype_t *ty, AttrBuilder&, LLVMContext &ctx, Type* llvm_t) = 0;
+    virtual Type *preferred_llvm_type(language_datatype_t *ty, bool isret, LLVMContext &ctx) const = 0;
 };
 
 // Determine if object of bitstype ty maps to a native x86 SIMD type (__m128, __m256, or __m512) in C
-static bool is_native_simd_type(code_datatype_t *dt) {
-    size_t size = code_datatype_size(dt);
+static bool is_native_simd_type(language_datatype_t *dt) {
+    size_t size = language_datatype_size(dt);
     if (size != 16 && size != 32 && size != 64)
         // Wrong size for xmm, ymm, or zmm register.
         return false;
-    uint32_t n = code_datatype_nfields(dt);
+    uint32_t n = language_datatype_nfields(dt);
     if (n<2)
         // Not mapped to SIMD register.
         return false;
-    code_value_t *ft0 = code_field_type(dt, 0);
+    language_value_t *ft0 = language_field_type(dt, 0);
     for (uint32_t i = 1; i < n; ++i)
-        if (code_field_type(dt, i) != ft0)
+        if (language_field_type(dt, i) != ft0)
             // Not homogeneous
             return false;
     // Type is homogeneous.  Check if it maps to LLVM vector.
-    return code_special_vector_alignment(n, ft0) != 0;
+    return language_special_vector_alignment(n, ft0) != 0;
 }
 
 #include "abi_llvm.cpp"
@@ -416,7 +416,7 @@ static bool is_native_simd_type(code_datatype_t *dt) {
 
 // basic type widening and cast conversions
 static Value *llvm_type_rewrite(
-        code_codectx_t &ctx,
+        language_languagectx_t &ctx,
         Value *v, Type *target_type,
         bool issigned) /* determines whether an integer value should be zero or sign extended */
 {
@@ -481,19 +481,19 @@ static Value *llvm_type_rewrite(
 
 // --- argument passing and scratch space utilities ---
 
-// Returns ctx.types().T_prcodevalue
-static Value *runtime_apply_type_env(code_codectx_t &ctx, code_value_t *ty)
+// Returns ctx.types().T_prlanguagevalue
+static Value *runtime_apply_type_env(language_languagectx_t &ctx, language_value_t *ty)
 {
     // box if concrete type was not statically known
     Value *args[] = {
         literal_pointer_val(ctx, ty),
-        literal_pointer_val(ctx, (code_value_t*)ctx.linfo->def.method->sig),
+        literal_pointer_val(ctx, (language_value_t*)ctx.linfo->def.method->sig),
         ctx.builder.CreateInBoundsGEP(
-                ctx.types().T_prcodevalue,
+                ctx.types().T_prlanguagevalue,
                 ctx.spvals_ptr,
-                ConstantInt::get(ctx.types().T_size, sizeof(code_svec_t) / sizeof(code_value_t*)))
+                ConstantInt::get(ctx.types().T_size, sizeof(language_svec_t) / sizeof(language_value_t*)))
     };
-    auto call = ctx.builder.CreateCall(prepare_call(codeapplytype_func), ArrayRef<Value*>(args));
+    auto call = ctx.builder.CreateCall(prepare_call(languageapplytype_func), ArrayRef<Value*>(args));
     addRetAttr(call, Attribute::getWithAlignment(ctx.builder.getContext(), Align(16)));
     return call;
 }
@@ -512,12 +512,12 @@ static const std::string make_errmsg(const char *fname, int n, const char *err)
     return msg.str();
 }
 
-static void typeassert_input(code_codectx_t &ctx, const code_cgval_t &jvinfo, code_value_t *codeto, code_unionall_t *codeto_env, int argn)
+static void typeassert_input(language_languagectx_t &ctx, const language_cgval_t &jvinfo, language_value_t *languageto, language_unionall_t *languageto_env, int argn)
 {
-    if (codeto != (code_value_t*)code_any_type && !code_subtype(jvinfo.typ, codeto)) {
-        if (codeto == (code_value_t*)code_voidpointer_type) {
+    if (languageto != (language_value_t*)language_any_type && !language_subtype(jvinfo.typ, languageto)) {
+        if (languageto == (language_value_t*)language_voidpointer_type) {
             // allow a bit more flexibility for what can be passed to (void*) due to Ref{T} conversion behavior in input
-            if (!code_is_cpointer_type(jvinfo.typ)) {
+            if (!language_is_cpointer_type(jvinfo.typ)) {
                 // emit a typecheck, if not statically known to be correct
                 emit_cpointercheck(ctx, jvinfo, make_errmsg("ccall", argn + 1, ""));
             }
@@ -525,14 +525,14 @@ static void typeassert_input(code_codectx_t &ctx, const code_cgval_t &jvinfo, co
         else {
             // emit a typecheck, if not statically known to be correct
             std::string msg = make_errmsg("ccall", argn + 1, "");
-            if (!codeto_env || !code_has_typevar_from_unionall(codeto, codeto_env)) {
-                emit_typecheck(ctx, jvinfo, codeto, msg);
+            if (!languageto_env || !language_has_typevar_from_unionall(languageto, languageto_env)) {
+                emit_typecheck(ctx, jvinfo, languageto, msg);
             }
             else {
-                code_cgval_t codeto_runtime = mark_code_type(ctx, runtime_apply_type_env(ctx, codeto), true, code_any_type);
+                language_cgval_t languageto_runtime = mark_language_type(ctx, runtime_apply_type_env(ctx, languageto), true, language_any_type);
                 Value *vx = boxed(ctx, jvinfo);
                 Value *istype = ctx.builder.CreateICmpNE(
-                        ctx.builder.CreateCall(prepare_call(codeisa_func), { vx, boxed(ctx, codeto_runtime) }),
+                        ctx.builder.CreateCall(prepare_call(languageisa_func), { vx, boxed(ctx, languageto_runtime) }),
                         ConstantInt::get(getInt32Ty(ctx.builder.getContext()), 0));
                 setName(ctx.emission_context, istype, "istype");
                 BasicBlock *failBB = BasicBlock::Create(ctx.builder.getContext(), "fail", ctx.f);
@@ -540,7 +540,7 @@ static void typeassert_input(code_codectx_t &ctx, const code_cgval_t &jvinfo, co
                 ctx.builder.CreateCondBr(istype, passBB, failBB);
 
                 ctx.builder.SetInsertPoint(failBB);
-                just_emit_type_error(ctx, mark_code_type(ctx, vx, true, code_any_type), boxed(ctx, codeto_runtime), msg);
+                just_emit_type_error(ctx, mark_language_type(ctx, vx, true, language_any_type), boxed(ctx, languageto_runtime), msg);
                 ctx.builder.CreateUnreachable();
                 ctx.builder.SetInsertPoint(passBB);
             }
@@ -548,14 +548,14 @@ static void typeassert_input(code_codectx_t &ctx, const code_cgval_t &jvinfo, co
     }
 }
 
-// Emit code to convert argument to form expected by C ABI
+// Emit language to convert argument to form expected by C ABI
 // to = desired LLVM type
-// codeto = Code type of formal argument
+// languageto = Language type of formal argument
 // jvinfo = value of actual argument
-static Value *code_to_native(
-        code_codectx_t &ctx,
-        Type *to, bool toboxed, code_value_t *codeto, code_unionall_t *codeto_env,
-        const code_cgval_t &jvinfo,
+static Value *language_to_native(
+        language_languagectx_t &ctx,
+        Type *to, bool toboxed, language_value_t *languageto, language_unionall_t *languageto_env,
+        const language_cgval_t &jvinfo,
         bool byRef, int argn)
 {
     // We're passing Any
@@ -563,36 +563,36 @@ static Value *code_to_native(
         assert(!byRef); // don't expect any ABI to pass pointers by pointer
         return boxed(ctx, jvinfo);
     }
-    assert(code_is_datatype(codeto) && code_struct_try_layout((code_datatype_t*)codeto));
+    assert(language_is_datatype(languageto) && language_struct_try_layout((language_datatype_t*)languageto));
 
-    typeassert_input(ctx, jvinfo, codeto, codeto_env, argn);
+    typeassert_input(ctx, jvinfo, languageto, languageto_env, argn);
     if (!byRef)
-        return emit_unbox(ctx, to, jvinfo, codeto);
+        return emit_unbox(ctx, to, jvinfo, languageto);
 
     // pass the address of an alloca'd thing, not a box
     // since those are immutable.
     Value *slot = emit_static_alloca(ctx, to);
-    unsigned align = code_alignment(codeto);
+    unsigned align = language_alignment(languageto);
     cast<AllocaInst>(slot)->setAlignment(Align(align));
     setName(ctx.emission_context, slot, "native_convert_buffer");
     if (!jvinfo.ispointer()) {
-        code_aliasinfo_t ai = code_aliasinfo_t::fromTBAA(ctx, jvinfo.tbaa);
-        ai.decorateInst(ctx.builder.CreateStore(emit_unbox(ctx, to, jvinfo, codeto), slot));
+        language_aliasinfo_t ai = language_aliasinfo_t::fromTBAA(ctx, jvinfo.tbaa);
+        ai.decorateInst(ctx.builder.CreateStore(emit_unbox(ctx, to, jvinfo, languageto), slot));
     }
     else {
-        code_aliasinfo_t ai = code_aliasinfo_t::fromTBAA(ctx, jvinfo.tbaa);
-        emit_memcpy(ctx, slot, ai, jvinfo, code_datatype_size(codeto), align, align);
+        language_aliasinfo_t ai = language_aliasinfo_t::fromTBAA(ctx, jvinfo.tbaa);
+        emit_memcpy(ctx, slot, ai, jvinfo, language_datatype_size(languageto), align, align);
     }
     return slot;
 }
 
 typedef struct {
-    Value *code_ptr;  // if the argument is a run-time computed pointer
+    Value *language_ptr;  // if the argument is a run-time computed pointer
     void (*fptr)(void);     // if the argument is a constant pointer
     const char *f_name;   // if the symbol name is known
     const char *f_lib;    // if a library name is specified
-    code_value_t *lib_expr; // expression to compute library path lazily
-    code_value_t *gcroot;
+    language_value_t *lib_expr; // expression to compute library path lazily
+    language_value_t *gcroot;
 } native_sym_arg_t;
 
 static inline const char *invalid_symbol_err_msg(bool ccall)
@@ -603,84 +603,84 @@ static inline const char *invalid_symbol_err_msg(bool ccall)
 }
 
 // --- parse :sym or (:sym, :lib) argument into address info ---
-static void interpret_symbol_arg(code_codectx_t &ctx, native_sym_arg_t &out, code_value_t *arg, bool ccall, bool llvmcall)
+static void interpret_symbol_arg(language_languagectx_t &ctx, native_sym_arg_t &out, language_value_t *arg, bool ccall, bool llvmcall)
 {
-    Value *&code_ptr = out.code_ptr;
+    Value *&language_ptr = out.language_ptr;
     void (*&fptr)(void) = out.fptr;
     const char *&f_name = out.f_name;
     const char *&f_lib = out.f_lib;
 
-    code_value_t *ptr = static_eval(ctx, arg);
+    language_value_t *ptr = static_eval(ctx, arg);
     if (ptr == NULL) {
-        if (code_is_expr(arg) && ((code_expr_t*)arg)->head == code_call_sym && code_expr_nargs(arg) == 3 &&
-            code_is_globalref(code_exprarg(arg,0)) && code_globalref_mod(code_exprarg(arg,0)) == code_core_module &&
-            code_globalref_name(code_exprarg(arg,0)) == code_symbol("tuple")) {
+        if (language_is_expr(arg) && ((language_expr_t*)arg)->head == language_call_sym && language_expr_nargs(arg) == 3 &&
+            language_is_globalref(language_exprarg(arg,0)) && language_globalref_mod(language_exprarg(arg,0)) == language_core_module &&
+            language_globalref_name(language_exprarg(arg,0)) == language_symbol("tuple")) {
             // attempt to interpret a non-constant 2-tuple expression as (func_name, lib_name()), where
             // `lib_name()` will be executed when first used.
-            code_value_t *name_val = static_eval(ctx, code_exprarg(arg,1));
-            if (name_val && code_is_symbol(name_val)) {
-                f_name = code_symbol_name((code_sym_t*)name_val);
-                out.lib_expr = code_exprarg(arg, 2);
+            language_value_t *name_val = static_eval(ctx, language_exprarg(arg,1));
+            if (name_val && language_is_symbol(name_val)) {
+                f_name = language_symbol_name((language_sym_t*)name_val);
+                out.lib_expr = language_exprarg(arg, 2);
                 return;
             }
-            else if (name_val && code_is_string(name_val)) {
-                f_name = code_string_data(name_val);
+            else if (name_val && language_is_string(name_val)) {
+                f_name = language_string_data(name_val);
                 out.gcroot = name_val;
-                out.lib_expr = code_exprarg(arg, 2);
+                out.lib_expr = language_exprarg(arg, 2);
                 return;
             }
         }
-        code_cgval_t arg1 = emit_expr(ctx, arg);
-        code_value_t *ptr_ty = arg1.typ;
-        if (!code_is_cpointer_type(ptr_ty)) {
+        language_cgval_t arg1 = emit_expr(ctx, arg);
+        language_value_t *ptr_ty = arg1.typ;
+        if (!language_is_cpointer_type(ptr_ty)) {
             const char *errmsg = invalid_symbol_err_msg(ccall);
             emit_cpointercheck(ctx, arg1, errmsg);
         }
-        arg1 = update_code_type(ctx, arg1, (code_value_t*)code_voidpointer_type);
-        code_ptr = emit_unbox(ctx, ctx.types().T_ptr, arg1, (code_value_t*)code_voidpointer_type);
+        arg1 = update_language_type(ctx, arg1, (language_value_t*)language_voidpointer_type);
+        language_ptr = emit_unbox(ctx, ctx.types().T_ptr, arg1, (language_value_t*)language_voidpointer_type);
     }
     else {
         out.gcroot = ptr;
-        if (code_is_tuple(ptr) && code_nfields(ptr) == 1) {
-            ptr = code_fieldref(ptr, 0);
+        if (language_is_tuple(ptr) && language_nfields(ptr) == 1) {
+            ptr = language_fieldref(ptr, 0);
         }
 
-        if (code_is_symbol(ptr))
-            f_name = code_symbol_name((code_sym_t*)ptr);
-        else if (code_is_string(ptr))
-            f_name = code_string_data(ptr);
+        if (language_is_symbol(ptr))
+            f_name = language_symbol_name((language_sym_t*)ptr);
+        else if (language_is_string(ptr))
+            f_name = language_string_data(ptr);
 
         if (f_name != NULL) {
-            // just symbol, default to CodeDLHandle
+            // just symbol, default to LanguageDLHandle
             // will look in process symbol table
             if (!llvmcall) {
                 void *symaddr;
                 std::string iname("i");
                 iname += f_name;
-                if (code_dlsym(code_libcode_internal_handle, iname.c_str(), &symaddr, 0)) {
-                    f_lib = JL_LIBCODE_INTERNAL_DL_LIBNAME;
-                    f_name = code_symbol_name(code_symbol(iname.c_str()));
+                if (language_dlsym(language_liblanguage_internal_handle, iname.c_str(), &symaddr, 0)) {
+                    f_lib = JL_LIBLANGUAGE_INTERNAL_DL_LIBNAME;
+                    f_name = language_symbol_name(language_symbol(iname.c_str()));
                 }
                 else {
-                    f_lib = code_dlfind(f_name);
+                    f_lib = language_dlfind(f_name);
                 }
             }
         }
-        else if (code_is_cpointer_type(code_typeof(ptr))) {
-            fptr = *(void(**)(void))code_data_ptr(ptr);
+        else if (language_is_cpointer_type(language_typeof(ptr))) {
+            fptr = *(void(**)(void))language_data_ptr(ptr);
         }
-        else if (code_is_tuple(ptr) && code_nfields(ptr) > 1) {
-            code_value_t *t0 = code_fieldref(ptr, 0);
-            if (code_is_symbol(t0))
-                f_name = code_symbol_name((code_sym_t*)t0);
-            else if (code_is_string(t0))
-                f_name = code_string_data(t0);
+        else if (language_is_tuple(ptr) && language_nfields(ptr) > 1) {
+            language_value_t *t0 = language_fieldref(ptr, 0);
+            if (language_is_symbol(t0))
+                f_name = language_symbol_name((language_sym_t*)t0);
+            else if (language_is_string(t0))
+                f_name = language_string_data(t0);
 
-            code_value_t *t1 = code_fieldref(ptr, 1);
-            if (code_is_symbol(t1))
-                f_lib = code_symbol_name((code_sym_t*)t1);
-            else if (code_is_string(t1))
-                f_lib = code_string_data(t1);
+            language_value_t *t1 = language_fieldref(ptr, 1);
+            if (language_is_symbol(t1))
+                f_lib = language_symbol_name((language_sym_t*)t1);
+            else if (language_is_string(t1))
+                f_lib = language_string_data(t1);
             else {
                 out.lib_expr = t1;
             }
@@ -688,15 +688,15 @@ static void interpret_symbol_arg(code_codectx_t &ctx, native_sym_arg_t &out, cod
     }
 }
 
-// --- code generator for cglobal ---
+// --- language generator for cglobal ---
 
-static code_cgval_t emit_runtime_call(code_codectx_t &ctx, JL_I::intrinsic f, ArrayRef<code_cgval_t> argv, size_t nargs);
+static language_cgval_t emit_runtime_call(language_languagectx_t &ctx, JL_I::intrinsic f, ArrayRef<language_cgval_t> argv, size_t nargs);
 
-static code_cgval_t emit_cglobal(code_codectx_t &ctx, code_value_t **args, size_t nargs)
+static language_cgval_t emit_cglobal(language_languagectx_t &ctx, language_value_t **args, size_t nargs)
 {
     ++EmittedCGlobals;
     JL_NARGS(cglobal, 1, 2);
-    code_value_t *rt = NULL;
+    language_value_t *rt = NULL;
     Value *res;
     native_sym_arg_t sym = {};
     JL_GC_PUSH2(&rt, &sym.gcroot);
@@ -705,38 +705,38 @@ static code_cgval_t emit_cglobal(code_codectx_t &ctx, code_value_t **args, size_
         rt = static_eval(ctx, args[2]);
         if (rt == NULL) {
             JL_GC_POP();
-            code_cgval_t argv[2];
+            language_cgval_t argv[2];
             argv[0] = emit_expr(ctx, args[1]);
             argv[1] = emit_expr(ctx, args[2]);
             return emit_runtime_call(ctx, JL_I::cglobal, argv, nargs);
         }
 
         JL_TYPECHK(cglobal, type, rt);
-        rt = (code_value_t*)code_apply_type1((code_value_t*)code_pointer_type, rt);
+        rt = (language_value_t*)language_apply_type1((language_value_t*)language_pointer_type, rt);
     }
     else {
-        rt = (code_value_t*)code_voidpointer_type;
+        rt = (language_value_t*)language_voidpointer_type;
     }
     Type *lrt = ctx.types().T_ptr;
-    assert(lrt == code_type_to_llvm(ctx, rt));
+    assert(lrt == language_type_to_llvm(ctx, rt));
 
     interpret_symbol_arg(ctx, sym, args[1], /*ccall=*/false, false);
 
-    if (sym.f_name == NULL && sym.fptr == NULL && sym.code_ptr == NULL && sym.gcroot != NULL) {
+    if (sym.f_name == NULL && sym.fptr == NULL && sym.language_ptr == NULL && sym.gcroot != NULL) {
         const char *errmsg = invalid_symbol_err_msg(/*ccall=*/false);
-        code_cgval_t arg1 = emit_expr(ctx, args[1]);
-        emit_type_error(ctx, arg1, literal_pointer_val(ctx, (code_value_t *)code_pointer_type), errmsg);
+        language_cgval_t arg1 = emit_expr(ctx, args[1]);
+        emit_type_error(ctx, arg1, literal_pointer_val(ctx, (language_value_t *)language_pointer_type), errmsg);
         JL_GC_POP();
-        return code_cgval_t();
+        return language_cgval_t();
     }
 
-    if (sym.code_ptr != NULL) {
-        res = sym.code_ptr;
+    if (sym.language_ptr != NULL) {
+        res = sym.language_ptr;
     }
     else if (sym.fptr != NULL) {
         res = ConstantInt::get(lrt, (uint64_t)sym.fptr);
         if (ctx.emission_context.imaging_mode)
-            code_printf(JL_STDERR,"WARNING: literal address used in cglobal for %s; code cannot be statically compiled\n", sym.f_name);
+            language_printf(JL_STDERR,"WARNING: literal address used in cglobal for %s; language cannot be statically compiled\n", sym.f_name);
     }
     else {
         if (sym.lib_expr) {
@@ -748,12 +748,12 @@ static code_cgval_t emit_cglobal(code_codectx_t &ctx, code_value_t **args, size_
     }
 
     JL_GC_POP();
-    return mark_code_type(ctx, res, false, rt);
+    return mark_language_type(ctx, res, false, rt);
 }
 
-// --- code generator for llvmcall ---
+// --- language generator for llvmcall ---
 
-static code_cgval_t emit_llvmcall(code_codectx_t &ctx, code_value_t **args, size_t nargs)
+static language_cgval_t emit_llvmcall(language_languagectx_t &ctx, language_value_t **args, size_t nargs)
 {
     ++EmittedLLVMCalls;
     // parse and validate arguments
@@ -765,69 +765,69 @@ static code_cgval_t emit_llvmcall(code_codectx_t &ctx, code_value_t **args, size
     //   where `mod` represents the assembly of an entire LLVM module,
     //   and `fn` the name of the function to call
     JL_NARGSV(llvmcall, 3);
-    code_value_t *rt = NULL, *at = NULL, *ir = NULL, *entry = NULL;
-    code_value_t *ir_arg = args[1];
+    language_value_t *rt = NULL, *at = NULL, *ir = NULL, *entry = NULL;
+    language_value_t *ir_arg = args[1];
     JL_GC_PUSH4(&ir, &rt, &at, &entry);
-    if (code_is_ssavalue(ir_arg))
-        ir_arg = code_array_ptr_ref((code_array_t*)ctx.source->code, ((code_ssavalue_t*)ir_arg)->id - 1);
+    if (language_is_ssavalue(ir_arg))
+        ir_arg = language_array_ptr_ref((language_array_t*)ctx.source->language, ((language_ssavalue_t*)ir_arg)->id - 1);
     ir = static_eval(ctx, ir_arg);
     if (!ir) {
         emit_error(ctx, "error statically evaluating llvm IR argument");
         JL_GC_POP();
-        return code_cgval_t();
+        return language_cgval_t();
     }
-    if (code_is_ssavalue(args[2]) && !code_is_long(ctx.source->ssavaluetypes)) {
-        code_value_t *rtt = code_array_ptr_ref((code_array_t*)ctx.source->ssavaluetypes, ((code_ssavalue_t*)args[2])->id - 1);
-        if (code_is_type_type(rtt))
-            rt = code_tparam0(rtt);
+    if (language_is_ssavalue(args[2]) && !language_is_long(ctx.source->ssavaluetypes)) {
+        language_value_t *rtt = language_array_ptr_ref((language_array_t*)ctx.source->ssavaluetypes, ((language_ssavalue_t*)args[2])->id - 1);
+        if (language_is_type_type(rtt))
+            rt = language_tparam0(rtt);
     }
     if (!rt) {
         rt = static_eval(ctx, args[2]);
         if (!rt) {
             emit_error(ctx, "error statically evaluating llvmcall return type");
             JL_GC_POP();
-            return code_cgval_t();
+            return language_cgval_t();
         }
     }
-    if (code_is_ssavalue(args[3]) && !code_is_long(ctx.source->ssavaluetypes)) {
-        code_value_t *att = code_array_ptr_ref((code_array_t*)ctx.source->ssavaluetypes, ((code_ssavalue_t*)args[3])->id - 1);
-        if (code_is_type_type(att))
-            at = code_tparam0(att);
+    if (language_is_ssavalue(args[3]) && !language_is_long(ctx.source->ssavaluetypes)) {
+        language_value_t *att = language_array_ptr_ref((language_array_t*)ctx.source->ssavaluetypes, ((language_ssavalue_t*)args[3])->id - 1);
+        if (language_is_type_type(att))
+            at = language_tparam0(att);
     }
     if (!at) {
         at = static_eval(ctx, args[3]);
         if (!at) {
             emit_error(ctx, "error statically evaluating llvmcall argument tuple");
             JL_GC_POP();
-            return code_cgval_t();
+            return language_cgval_t();
         }
     }
-    if (code_is_tuple(ir)) {
+    if (language_is_tuple(ir)) {
         // if the IR is a tuple, we expect (mod, fn)
-        if (code_nfields(ir) != 2) {
+        if (language_nfields(ir) != 2) {
             emit_error(ctx, "Tuple as first argument to llvmcall must have exactly two children");
             JL_GC_POP();
-            return code_cgval_t();
+            return language_cgval_t();
         }
-        entry = code_fieldref(ir, 1);
-        if (!code_is_string(entry)) {
+        entry = language_fieldref(ir, 1);
+        if (!language_is_string(entry)) {
             emit_error(ctx, "Function name passed to llvmcall must be a string");
             JL_GC_POP();
-            return code_cgval_t();
+            return language_cgval_t();
         }
-        ir = code_fieldref(ir, 0);
+        ir = language_fieldref(ir, 0);
 
-        if (!code_is_string(ir) && !code_typetagis(ir, code_array_uint8_type)) {
+        if (!language_is_string(ir) && !language_typetagis(ir, language_array_uint8_type)) {
             emit_error(ctx, "Module IR passed to llvmcall must be a string or an array of bytes");
             JL_GC_POP();
-            return code_cgval_t();
+            return language_cgval_t();
         }
     }
     else {
-        if (!code_is_string(ir)) {
+        if (!language_is_string(ir)) {
             emit_error(ctx, "Function IR passed to llvmcall must be a string");
             JL_GC_POP();
-            return code_cgval_t();
+            return language_cgval_t();
         }
     }
 
@@ -838,41 +838,41 @@ static code_cgval_t emit_llvmcall(code_codectx_t &ctx, code_value_t **args, size
     //
     // Semantics for arguments are as follows:
     // If the argument type is immutable (including bitstype), we pass the loaded llvm value
-    // type. Otherwise we pass a pointer to a code_value_t.
-    code_svec_t *tt = ((code_datatype_t *)at)->parameters;
-    size_t nargt = code_svec_len(tt);
+    // type. Otherwise we pass a pointer to a language_value_t.
+    language_svec_t *tt = ((language_datatype_t *)at)->parameters;
+    size_t nargt = language_svec_len(tt);
     SmallVector<llvm::Type*, 0> argtypes;
     SmallVector<Value *, 8> argvals(nargt);
     for (size_t i = 0; i < nargt; ++i) {
-        code_value_t *tti = code_svecref(tt,i);
+        language_value_t *tti = language_svecref(tt,i);
         bool toboxed;
-        Type *t = code_type_to_llvm(ctx, tti, &toboxed);
+        Type *t = language_type_to_llvm(ctx, tti, &toboxed);
         argtypes.push_back(t);
         if (4 + i > nargs) {
             emit_error(ctx, "Missing arguments to llvmcall!");
             JL_GC_POP();
-            return code_cgval_t();
+            return language_cgval_t();
         }
-        code_value_t *argi = args[4 + i];
-        code_cgval_t arg = emit_expr(ctx, argi);
+        language_value_t *argi = args[4 + i];
+        language_cgval_t arg = emit_expr(ctx, argi);
 
-        Value *v = code_to_native(ctx, t, toboxed, tti, NULL, arg, false, i);
-        bool issigned = code_signed_type && code_subtype(tti, (code_value_t*)code_signed_type);
+        Value *v = language_to_native(ctx, t, toboxed, tti, NULL, arg, false, i);
+        bool issigned = language_signed_type && language_subtype(tti, (language_value_t*)language_signed_type);
         argvals[i] = llvm_type_rewrite(ctx, v, t, issigned);
     }
 
     // Determine return type
-    code_value_t *rtt = rt;
+    language_value_t *rtt = rt;
     bool retboxed;
-    Type *rettype = code_type_to_llvm(ctx, rtt, &retboxed);
+    Type *rettype = language_type_to_llvm(ctx, rtt, &retboxed);
 
     // Make sure to find a unique name
     std::string ir_name;
     while (true) {
         raw_string_ostream(ir_name)
             << (ctx.f->getName().str()) << "u"
-            << code_atomic_fetch_add_relaxed(&globalUniqueGeneratedNames, 1);
-        if (code_Module->getFunction(ir_name) == NULL)
+            << language_atomic_fetch_add_relaxed(&globalUniqueGeneratedNames, 1);
+        if (language_Module->getFunction(ir_name) == NULL)
             break;
     }
 
@@ -902,7 +902,7 @@ static code_cgval_t emit_llvmcall(code_codectx_t &ctx, code_value_t **args, size
         raw_string_ostream ir_stream(ir_string);
         ir_stream << "define " << rtypename.str() << " @\"" << ir_name << "\"("
                   << argstream.str() << ") {\n"
-                  << code_string_data(ir) << "\n}";
+                  << language_string_data(ir) << "\n}";
 
         SMDiagnostic Err = SMDiagnostic();
         Mod = parseAssemblyString(ir_stream.str(), Err, ctx.builder.getContext());
@@ -914,9 +914,9 @@ static code_cgval_t emit_llvmcall(code_codectx_t &ctx, code_value_t **args, size
             for (size_t i = 0; i < nargt; ++i) {
                 if (i > 0)
                     compat_argstream << ",";
-                code_value_t *tti = code_svecref(tt, i);
+                language_value_t *tti = language_svecref(tt, i);
                 Type *t;
-                if (code_is_cpointer_type(tti))
+                if (language_is_cpointer_type(tti))
                     t = ctx.types().T_size;
                 else
                     t = argtypes[i];
@@ -926,7 +926,7 @@ static code_cgval_t emit_llvmcall(code_codectx_t &ctx, code_value_t **args, size
 
             std::string compat_rstring;
             raw_string_ostream compat_rtypename(compat_rstring);
-            if (code_is_cpointer_type(rtt))
+            if (language_is_cpointer_type(rtt))
                 ctx.types().T_size->print(compat_rtypename);
             else
                 rettype->print(compat_rtypename);
@@ -935,7 +935,7 @@ static code_cgval_t emit_llvmcall(code_codectx_t &ctx, code_value_t **args, size
             raw_string_ostream compat_ir_stream(compat_ir_string);
             compat_ir_stream << "define " << compat_rtypename.str() << " @\"" << ir_name
                              << "\"(" << compat_argstream.str() << ") {\n"
-                             << code_string_data(ir) << "\n}";
+                             << language_string_data(ir) << "\n}";
 
             SMDiagnostic Err = SMDiagnostic();
             Mod =
@@ -948,52 +948,52 @@ static code_cgval_t emit_llvmcall(code_codectx_t &ctx, code_value_t **args, size
             Err.print("", stream, true);
             emit_error(ctx, stream.str());
             JL_GC_POP();
-            return code_cgval_t();
+            return language_cgval_t();
         }
 
         f = Mod->getFunction(ir_name);
         f->addFnAttr(Attribute::AlwaysInline);
     }
     else {
-        // we have the IR or bitcode of an entire module, which we can parse directly
+        // we have the IR or bitlanguage of an entire module, which we can parse directly
 
-        if (code_is_string(ir)) {
+        if (language_is_string(ir)) {
             SMDiagnostic Err = SMDiagnostic();
-            Mod = parseAssemblyString(code_string_data(ir), Err, ctx.builder.getContext());
+            Mod = parseAssemblyString(language_string_data(ir), Err, ctx.builder.getContext());
             if (!Mod) {
                 std::string message = "Failed to parse LLVM assembly: \n";
                 raw_string_ostream stream(message);
                 Err.print("", stream, true);
                 emit_error(ctx, stream.str());
                 JL_GC_POP();
-                return code_cgval_t();
+                return language_cgval_t();
             }
         }
         else {
             auto Buf = MemoryBuffer::getMemBuffer(
-                StringRef(code_array_data(ir, char), code_array_nrows(ir)), "llvmcall",
+                StringRef(language_array_data(ir, char), language_array_nrows(ir)), "llvmcall",
                 /*RequiresNullTerminator*/ false);
             Expected<std::unique_ptr<Module>> ModuleOrErr =
-                parseBitcodeFile(*Buf, ctx.builder.getContext());
+                parseBitlanguageFile(*Buf, ctx.builder.getContext());
             if (Error Err = ModuleOrErr.takeError()) {
                 std::string Message;
                 handleAllErrors(std::move(Err),
                                 [&](ErrorInfoBase &EIB) { Message = EIB.message(); });
-                std::string message = "Failed to parse LLVM bitcode: \n";
+                std::string message = "Failed to parse LLVM bitlanguage: \n";
                 raw_string_ostream stream(message);
                 stream << Message;
                 emit_error(ctx, stream.str());
                 JL_GC_POP();
-                return code_cgval_t();
+                return language_cgval_t();
             }
             Mod = std::move(ModuleOrErr.get());
         }
 
-        f = Mod->getFunction(code_string_data(entry));
+        f = Mod->getFunction(language_string_data(entry));
         if (!f) {
             emit_error(ctx, "Module IR does not contain specified entry function");
             JL_GC_POP();
-            return code_cgval_t();
+            return language_cgval_t();
         }
         assert(!f->isDeclaration());
         f->setName(ir_name);
@@ -1002,31 +1002,31 @@ static code_cgval_t emit_llvmcall(code_codectx_t &ctx, code_value_t **args, size
     // backwards compatibility: support for IR with integer pointers
     bool mismatched_pointers = false;
     for (size_t i = 0; i < nargt; ++i) {
-        code_value_t *tti = code_svecref(tt, i);
-        if (code_is_cpointer_type(tti) &&
+        language_value_t *tti = language_svecref(tt, i);
+        if (language_is_cpointer_type(tti) &&
             !f->getFunctionType()->getParamType(i)->isPointerTy()) {
             mismatched_pointers = true;
             break;
         }
     }
     if (mismatched_pointers) {
-        if (code_options.depwarn) {
-            if (code_options.depwarn == JL_OPTIONS_DEPWARN_ERROR)
-                code_error("llvmcall with integer pointers is deprecated, "
+        if (language_options.depwarn) {
+            if (language_options.depwarn == JL_OPTIONS_DEPWARN_ERROR)
+                language_error("llvmcall with integer pointers is deprecated, "
                          "use an actual pointer type instead.");
 
             // ensure we only depwarn once per method
-            // TODO: lift this into a reusable codegen-level depwarn utility
-            static std::set<code_method_t*> llvmcall_depwarns;
-            code_method_t *m = ctx.linfo->def.method;
+            // TODO: lift this into a reusable languagegen-level depwarn utility
+            static std::set<language_method_t*> llvmcall_depwarns;
+            language_method_t *m = ctx.linfo->def.method;
             if (llvmcall_depwarns.find(m) == llvmcall_depwarns.end()) {
                 llvmcall_depwarns.insert(m);
-                code_printf(JL_STDERR,
+                language_printf(JL_STDERR,
                         "WARNING: llvmcall with integer pointers is deprecated.\n"
                         "Use actual pointers instead, replacing i32 or i64 with i8* or ptr\n"
                         "in ");
-                code_static_show(JL_STDERR, (code_value_t*) ctx.linfo->def.method);
-                code_printf(JL_STDERR, " at %s\n", ctx.file.str().c_str());
+                language_static_show(JL_STDERR, (language_value_t*) ctx.linfo->def.method);
+                language_printf(JL_STDERR, " at %s\n", ctx.file.str().c_str());
             }
         }
 
@@ -1046,9 +1046,9 @@ static code_cgval_t emit_llvmcall(code_codectx_t &ctx, code_value_t **args, size
         IRBuilder<> irbuilder(entry);
         SmallVector<Value *, 0> wrapper_args;
         for (size_t i = 0; i < nargt; ++i) {
-            code_value_t *tti = code_svecref(tt, i);
+            language_value_t *tti = language_svecref(tt, i);
             Value *v = wrapper->getArg(i);
-            if (code_is_cpointer_type(tti))
+            if (language_is_cpointer_type(tti))
                 v = irbuilder.CreatePtrToInt(v, ctx.types().T_size);
             wrapper_args.push_back(v);
         }
@@ -1057,7 +1057,7 @@ static code_cgval_t emit_llvmcall(code_codectx_t &ctx, code_value_t **args, size
         if (rettype->isVoidTy())
             irbuilder.CreateRetVoid();
         else {
-            if (code_is_cpointer_type(rtt))
+            if (language_is_cpointer_type(rtt))
                 call = irbuilder.CreateIntToPtr(call, ctx.types().T_ptr);
             irbuilder.CreateRet(call);
         }
@@ -1077,15 +1077,15 @@ static code_cgval_t emit_llvmcall(code_codectx_t &ctx, code_value_t **args, size
                    << *f->getFunctionType()->getParamType(i)
                    << " does not match expected argument type " << **it;
             emit_error(ctx, stream.str());
-            return code_cgval_t();
+            return language_cgval_t();
         }
     }
 
     // copy module properties that should always match
-    Mod->setTargetTriple(code_Module->getTargetTriple());
-    Mod->setDataLayout(code_Module->getDataLayout());
-    Mod->setStackProtectorGuard(code_Module->getStackProtectorGuard());
-    Mod->setOverrideStackAlignment(code_Module->getOverrideStackAlignment());
+    Mod->setTargetTriple(language_Module->getTargetTriple());
+    Mod->setDataLayout(language_Module->getDataLayout());
+    Mod->setStackProtectorGuard(language_Module->getStackProtectorGuard());
+    Mod->setOverrideStackAlignment(language_Module->getOverrideStackAlignment());
 
     // verify the definition
     Function *def = Mod->getFunction(ir_name);
@@ -1095,14 +1095,14 @@ static code_cgval_t emit_llvmcall(code_codectx_t &ctx, code_value_t **args, size
     if (verifyFunction(*def, &stream)) {
         emit_error(ctx, stream.str());
         JL_GC_POP();
-        return code_cgval_t();
+        return language_cgval_t();
     }
     def->setLinkage(GlobalVariable::LinkOnceODRLinkage);
 
     // generate a call
     FunctionType *decl_typ = FunctionType::get(rettype, argtypes, def->isVarArg());
     Function *decl = Function::Create(decl_typ, def->getLinkage(), def->getAddressSpace(),
-                                      def->getName(), code_Module);
+                                      def->getName(), language_Module);
     decl->setAttributes(def->getAttributes());
     CallInst *inst = ctx.builder.CreateCall(decl, argvals);
 
@@ -1119,67 +1119,67 @@ static code_cgval_t emit_llvmcall(code_codectx_t &ctx, code_value_t **args, size
         stream << "Malformed llvmcall: return type " << *inst->getType()
                << " does not match declared return type" << *rettype;
         emit_error(ctx, stream.str());
-        return code_cgval_t();
+        return language_cgval_t();
     }
 
-    return mark_code_type(ctx, inst, retboxed, rtt);
+    return mark_language_type(ctx, inst, retboxed, rtt);
 }
 
-// --- code generator for ccall itself ---
+// --- language generator for ccall itself ---
 
-// Returns ctx.types().T_prcodevalue
-static Value *box_ccall_result(code_codectx_t &ctx, Value *result, Value *runtime_dt, code_value_t *rt)
+// Returns ctx.types().T_prlanguagevalue
+static Value *box_ccall_result(language_languagectx_t &ctx, Value *result, Value *runtime_dt, language_value_t *rt)
 {
     // XXX: need to handle parameterized zero-byte types (singleton)
     const DataLayout &DL = ctx.builder.GetInsertBlock()->getModule()->getDataLayout();
     unsigned nb = DL.getTypeStoreSize(result->getType());
     unsigned align = sizeof(void*); // Allocations are at least pointer aligned
-    MDNode *tbaa = code_is_mutable(rt) ? ctx.tbaa().tbaa_mutab : ctx.tbaa().tbaa_immut;
+    MDNode *tbaa = language_is_mutable(rt) ? ctx.tbaa().tbaa_mutab : ctx.tbaa().tbaa_immut;
     Value *strct = emit_allocobj(ctx, nb, runtime_dt, true, align);
     setName(ctx.emission_context, strct, "ccall_result_box");
     init_bits_value(ctx, strct, result, tbaa);
     return strct;
 }
 
-static code_cgval_t mark_or_box_ccall_result(code_codectx_t &ctx, Value *result, bool isboxed, code_value_t *rt, code_unionall_t *unionall, bool static_rt)
+static language_cgval_t mark_or_box_ccall_result(language_languagectx_t &ctx, Value *result, bool isboxed, language_value_t *rt, language_unionall_t *unionall, bool static_rt)
 {
     if (!static_rt) {
-        assert(!isboxed && code_is_datatype(rt) && ctx.spvals_ptr && unionall);
+        assert(!isboxed && language_is_datatype(rt) && ctx.spvals_ptr && unionall);
         Value *runtime_dt = runtime_apply_type_env(ctx, rt);
         // TODO: skip this check if rt is not a Tuple
         emit_concretecheck(ctx, runtime_dt, "ccall: return type must be a concrete DataType");
         Value *strct = box_ccall_result(ctx, result, runtime_dt, rt);
-        return mark_code_type(ctx, strct, true, rt); // TODO: code_rewrap_unionall(rt, unionall)
+        return mark_language_type(ctx, strct, true, rt); // TODO: language_rewrap_unionall(rt, unionall)
     }
-    return mark_code_type(ctx, result, isboxed, rt);
+    return mark_language_type(ctx, result, isboxed, rt);
 }
 
 class function_sig_t {
 public:
-    SmallVector<Type*, 0> fargt; // vector of llvm output types (code_struct_to_llvm) for arguments
+    SmallVector<Type*, 0> fargt; // vector of llvm output types (language_struct_to_llvm) for arguments
     SmallVector<Type*, 0> fargt_sig; // vector of ABI coercion types for call signature
-    SmallVector<bool, 0> fargt_isboxed; // vector of whether the llvm output type is a Code-box for each argument
+    SmallVector<bool, 0> fargt_isboxed; // vector of whether the llvm output type is a Language-box for each argument
     SmallVector<bool, 0> byRefList; // vector of "byref" parameters
     AttributeList attributes; // vector of function call site attributes
-    Type *lrt; // input parameter of the llvm return type (from code_struct_to_llvm)
-    bool retboxed; // input parameter indicating whether lrt is code_value_t*
+    Type *lrt; // input parameter of the llvm return type (from language_struct_to_llvm)
+    bool retboxed; // input parameter indicating whether lrt is language_value_t*
     Type *prt; // out parameter of the llvm return type for the function signature
     int sret; // out parameter for indicating whether return value has been moved to the first argument position
     std::string err_msg;
     CallingConv::ID cc; // calling convention ABI
     bool llvmcall;
-    code_svec_t *at; // svec of code argument types
-    code_value_t *rt; // code return type
-    code_unionall_t *unionall_env; // UnionAll environment for `at` and `rt`
+    language_svec_t *at; // svec of language argument types
+    language_value_t *rt; // language return type
+    language_unionall_t *unionall_env; // UnionAll environment for `at` and `rt`
     size_t nccallargs; // number of actual arguments
     size_t nreqargs; // number of required arguments in ccall function definition
-    code_codegen_params_t *ctx;
+    language_languagegen_params_t *ctx;
 
-    function_sig_t(const char *fname, Type *lrt, code_value_t *rt, bool retboxed, code_svec_t *at, code_unionall_t *unionall_env, size_t nreqargs, CallingConv::ID cc, bool llvmcall, code_codegen_params_t *ctx)
+    function_sig_t(const char *fname, Type *lrt, language_value_t *rt, bool retboxed, language_svec_t *at, language_unionall_t *unionall_env, size_t nreqargs, CallingConv::ID cc, bool llvmcall, language_languagegen_params_t *ctx)
       : lrt(lrt), retboxed(retboxed),
         prt(NULL), sret(0), cc(cc), llvmcall(llvmcall),
         at(at), rt(rt), unionall_env(unionall_env),
-        nccallargs(code_svec_len(at)), nreqargs(nreqargs),
+        nccallargs(language_svec_len(at)), nreqargs(nreqargs),
         ctx(ctx)
     {
         err_msg = generate_func_sig(fname);
@@ -1193,17 +1193,17 @@ public:
             return FunctionType::get(sret ? getVoidTy(ctxt) : prt, fargt_sig, false);
     }
 
-    code_cgval_t emit_a_ccall(
-            code_codectx_t &ctx,
+    language_cgval_t emit_a_ccall(
+            language_languagectx_t &ctx,
             const native_sym_arg_t &symarg,
-            code_cgval_t *argv,
+            language_cgval_t *argv,
             SmallVectorImpl<Value*> &gc_uses,
             bool static_rt) const;
 
 private:
 std::string generate_func_sig(const char *fname)
 {
-    assert(rt && !code_is_abstract_ref_type(rt));
+    assert(rt && !language_is_abstract_ref_type(rt));
 
     SmallVector<AttributeSet, 0> paramattrs;
     std::unique_ptr<AbiLayout> abi;
@@ -1215,14 +1215,14 @@ std::string generate_func_sig(const char *fname)
     LLVMContext &LLVMCtx = lrt->getContext();
     if (type_is_ghost(lrt)) {
         prt = lrt = getVoidTy(LLVMCtx);
-        abi->use_sret(code_nothing_type, LLVMCtx);
+        abi->use_sret(language_nothing_type, LLVMCtx);
     }
     else {
-        if (retboxed || code_is_cpointer_type(rt) || lrt->isPointerTy()) {
+        if (retboxed || language_is_cpointer_type(rt) || lrt->isPointerTy()) {
             prt = lrt; // passed as pointer
-            abi->use_sret(code_voidpointer_type, LLVMCtx);
+            abi->use_sret(language_voidpointer_type, LLVMCtx);
         }
-        else if (abi->use_sret((code_datatype_t*)rt, LLVMCtx)) {
+        else if (abi->use_sret((language_datatype_t*)rt, LLVMCtx)) {
             AttrBuilder retattrs(LLVMCtx);
             if (!ctx->TargetTriple.isOSWindows()) {
                 // llvm used to use the old mingw ABI, skipping this marking works around that difference
@@ -1235,7 +1235,7 @@ std::string generate_func_sig(const char *fname)
             prt = lrt;
         }
         else {
-            prt = abi->preferred_llvm_type((code_datatype_t*)rt, true, LLVMCtx);
+            prt = abi->preferred_llvm_type((language_datatype_t*)rt, true, LLVMCtx);
             if (prt == NULL)
                 prt = lrt;
         }
@@ -1243,30 +1243,30 @@ std::string generate_func_sig(const char *fname)
 
     for (size_t i = 0; i < nccallargs; ++i) {
         AttrBuilder ab(LLVMCtx);
-        code_value_t *tti = code_svecref(at, i);
+        language_value_t *tti = language_svecref(at, i);
         Type *t = NULL;
         bool isboxed;
-        if (code_is_abstract_ref_type(tti)) {
-            tti = (code_value_t*)code_voidpointer_type;
+        if (language_is_abstract_ref_type(tti)) {
+            tti = (language_value_t*)language_voidpointer_type;
             t = getPointerTy(LLVMCtx);
             isboxed = false;
         }
-        else if (llvmcall && code_is_llvmpointer_type(tti)) {
+        else if (llvmcall && language_is_llvmpointer_type(tti)) {
             t = bitstype_to_llvm(tti, LLVMCtx, true);
-            tti = (code_value_t*)code_voidpointer_type;
+            tti = (language_value_t*)language_voidpointer_type;
             isboxed = false;
         }
         else {
-            t = _code_struct_to_llvm(ctx, LLVMCtx, tti, &isboxed, llvmcall);
+            t = _language_struct_to_llvm(ctx, LLVMCtx, tti, &isboxed, llvmcall);
             if (t == getVoidTy(LLVMCtx)) {
                 return make_errmsg(fname, i + 1, " type doesn't correspond to a C type");
             }
-            if (code_is_primitivetype(tti) && t->isIntegerTy()) {
+            if (language_is_primitivetype(tti) && t->isIntegerTy()) {
                 // see pull req #978. need to annotate signext/zeroext for
                 // small integer arguments.
-                code_datatype_t *bt = (code_datatype_t*)tti;
-                if (code_datatype_size(bt) < 4) {
-                    if (code_signed_type && code_subtype(tti, (code_value_t*)code_signed_type))
+                language_datatype_t *bt = (language_datatype_t*)tti;
+                if (language_datatype_size(bt) < 4) {
+                    if (language_signed_type && language_subtype(tti, (language_value_t*)language_signed_type))
                         ab.addAttribute(Attribute::SExt);
                     else
                         ab.addAttribute(Attribute::ZExt);
@@ -1275,23 +1275,23 @@ std::string generate_func_sig(const char *fname)
         }
 
         Type *pat;
-        // n.b. `Array` used as argument type just passes a code object reference
-        if (!code_is_datatype(tti) || ((code_datatype_t*)tti)->layout == NULL || code_is_array_type(tti) || code_is_layout_opaque(((code_datatype_t*)tti)->layout)) {
-            tti = (code_value_t*)code_voidpointer_type; // passed as pointer
+        // n.b. `Array` used as argument type just passes a language object reference
+        if (!language_is_datatype(tti) || ((language_datatype_t*)tti)->layout == NULL || language_is_array_type(tti) || language_is_layout_opaque(((language_datatype_t*)tti)->layout)) {
+            tti = (language_value_t*)language_voidpointer_type; // passed as pointer
         }
 
         // Whether or not LLVM wants us to emit a pointer to the data
         assert(t && "LLVM type should not be null");
-        bool byRef = abi->needPassByRef((code_datatype_t*)tti, ab, LLVMCtx, t);
+        bool byRef = abi->needPassByRef((language_datatype_t*)tti, ab, LLVMCtx, t);
 
-        if (code_is_cpointer_type(tti)) {
+        if (language_is_cpointer_type(tti)) {
             pat = t;
         }
         else if (byRef) {
             pat = PointerType::get(t, AddressSpace::Derived);
         }
         else {
-            pat = abi->preferred_llvm_type((code_datatype_t*)tti, false, LLVMCtx);
+            pat = abi->preferred_llvm_type((language_datatype_t*)tti, false, LLVMCtx);
             if (pat == NULL)
                 pat = t;
         }
@@ -1322,7 +1322,7 @@ std::string generate_func_sig(const char *fname)
     // If return value is boxed it must be non-null.
     if (retboxed)
         RetAttrs = RetAttrs.addAttribute(LLVMCtx, Attribute::NonNull);
-    if (rt == code_bottom_type)
+    if (rt == language_bottom_type)
         FnAttrs = FnAttrs.addAttribute(LLVMCtx, Attribute::NoReturn);
     assert(attributes.isEmpty());
     attributes = AttributeList::get(LLVMCtx, FnAttrs, RetAttrs, paramattrs);
@@ -1330,64 +1330,64 @@ std::string generate_func_sig(const char *fname)
 }
 };
 
-static std::pair<CallingConv::ID, bool> convert_cconv(code_sym_t *lhd)
+static std::pair<CallingConv::ID, bool> convert_cconv(language_sym_t *lhd)
 {
     // check for calling convention specifier
-    if (lhd == code_symbol("stdcall")) {
+    if (lhd == language_symbol("stdcall")) {
         return std::make_pair(CallingConv::X86_StdCall, false);
     }
-    else if (lhd == code_symbol("cdecl") || lhd == code_symbol("ccall")) {
+    else if (lhd == language_symbol("cdecl") || lhd == language_symbol("ccall")) {
         // `ccall` calling convention is a placeholder for when there isn't one provided
         // it is not by itself a valid calling convention name to be specified in the surface
         // syntax.
         return std::make_pair(CallingConv::C, false);
     }
-    else if (lhd == code_symbol("fastcall")) {
+    else if (lhd == language_symbol("fastcall")) {
         return std::make_pair(CallingConv::X86_FastCall, false);
     }
-    else if (lhd == code_symbol("thiscall")) {
+    else if (lhd == language_symbol("thiscall")) {
         return std::make_pair(CallingConv::X86_ThisCall, false);
     }
-    else if (lhd == code_symbol("llvmcall")) {
+    else if (lhd == language_symbol("llvmcall")) {
         return std::make_pair(CallingConv::C, true);
     }
-    code_errorf("ccall: invalid calling convention %s", code_symbol_name(lhd));
+    language_errorf("ccall: invalid calling convention %s", language_symbol_name(lhd));
 }
 
-static bool verify_ref_type(code_codectx_t &ctx, code_value_t* ref, code_unionall_t *unionall_env, int n, const char *fname)
+static bool verify_ref_type(language_languagectx_t &ctx, language_value_t* ref, language_unionall_t *unionall_env, int n, const char *fname)
 {
     // emit verification that the tparam for Ref isn't Any or a TypeVar
     const char rt_err_msg_notany[] = " type Ref{Any} is invalid. Use Any or Ptr{Any} instead.";
-    if (ref == (code_value_t*)code_any_type && n == 0) {
+    if (ref == (language_value_t*)language_any_type && n == 0) {
         emit_error(ctx, make_errmsg(fname, n, rt_err_msg_notany));
         return false;
     }
-    else if (code_is_typevar(ref)) {
+    else if (language_is_typevar(ref)) {
         bool always_error = true;
         if (unionall_env) {
             int i;
-            code_unionall_t *ua = unionall_env;
-            for (i = 0; code_is_unionall(ua); i++) {
-                if (ua->var == (code_tvar_t*)ref) {
-                    code_cgval_t runtime_sp = emit_sparam(ctx, i);
+            language_unionall_t *ua = unionall_env;
+            for (i = 0; language_is_unionall(ua); i++) {
+                if (ua->var == (language_tvar_t*)ref) {
+                    language_cgval_t runtime_sp = emit_sparam(ctx, i);
                     if (n > 0) {
                         always_error = false;
                     }
                     else if (runtime_sp.constant) {
-                        if (runtime_sp.constant != (code_value_t*)code_any_type)
+                        if (runtime_sp.constant != (language_value_t*)language_any_type)
                             always_error = false;
                     }
                     else {
                         Value *notany = ctx.builder.CreateICmpNE(
                                 boxed(ctx, runtime_sp),
-                                track_pcodevalue(ctx, literal_pointer_val(ctx, (code_value_t*)code_any_type)));
+                                track_planguagevalue(ctx, literal_pointer_val(ctx, (language_value_t*)language_any_type)));
                         setName(ctx.emission_context, notany, "any_type.not");
                         error_unless(ctx, notany, make_errmsg(fname, n, rt_err_msg_notany));
                         always_error = false;
                     }
                     break;
                 }
-                ua = (code_unionall_t*)ua->body;
+                ua = (language_unionall_t*)ua->body;
             }
         }
         if (always_error) {
@@ -1398,26 +1398,26 @@ static bool verify_ref_type(code_codectx_t &ctx, code_value_t* ref, code_unional
     return true;
 }
 
-static const std::string verify_ccall_sig(code_value_t *&rt, code_value_t *at,
-                                          code_unionall_t *unionall_env, code_svec_t *sparam_vals,
-                                          code_codegen_params_t *ctx,
+static const std::string verify_ccall_sig(language_value_t *&rt, language_value_t *at,
+                                          language_unionall_t *unionall_env, language_svec_t *sparam_vals,
+                                          language_languagegen_params_t *ctx,
                                           Type *&lrt, LLVMContext &ctxt,
                                           bool &retboxed, bool &static_rt, bool llvmcall=false)
 {
     JL_TYPECHK(ccall, type, rt);
     JL_TYPECHK(ccall, simplevector, at);
 
-    if (rt == (code_value_t*)code_any_type || code_is_array_type(rt) || code_is_genericmemory_type(rt) ||
-            (code_is_datatype(rt) && ((code_datatype_t*)rt)->layout != NULL &&
-             code_is_layout_opaque(((code_datatype_t*)rt)->layout))) {
-        // n.b. `Array` used as return type just returns a code object reference
-        lrt = CodeType::get_prcodevalue_ty(ctxt);
+    if (rt == (language_value_t*)language_any_type || language_is_array_type(rt) || language_is_genericmemory_type(rt) ||
+            (language_is_datatype(rt) && ((language_datatype_t*)rt)->layout != NULL &&
+             language_is_layout_opaque(((language_datatype_t*)rt)->layout))) {
+        // n.b. `Array` used as return type just returns a language object reference
+        lrt = LanguageType::get_prlanguagevalue_ty(ctxt);
         retboxed = true;
     }
     else {
-        // code_type_mappable_to_c should have already ensured that these are valid
-        assert(code_is_structtype(rt) || code_is_primitivetype(rt) || rt == (code_value_t*)code_bottom_type);
-        lrt = _code_struct_to_llvm(ctx, ctxt, rt, &retboxed, llvmcall);
+        // language_type_mappable_to_c should have already ensured that these are valid
+        assert(language_is_structtype(rt) || language_is_primitivetype(rt) || rt == (language_value_t*)language_bottom_type);
+        lrt = _language_struct_to_llvm(ctx, ctxt, rt, &retboxed, llvmcall);
         assert(!retboxed);
         if (CountTrackedPointers(lrt).count != 0)
             return "return type struct fields cannot contain a reference";
@@ -1428,9 +1428,9 @@ static const std::string verify_ccall_sig(code_value_t *&rt, code_value_t *at,
         static_rt = true;
     }
     else {
-        static_rt = retboxed || !code_has_typevar_from_unionall(rt, unionall_env);
-        if (!static_rt && sparam_vals != NULL && code_svec_len(sparam_vals) > 0) {
-            rt = code_instantiate_type_in_env(rt, unionall_env, code_svec_data(sparam_vals));
+        static_rt = retboxed || !language_has_typevar_from_unionall(rt, unionall_env);
+        if (!static_rt && sparam_vals != NULL && language_svec_len(sparam_vals) > 0) {
+            rt = language_instantiate_type_in_env(rt, unionall_env, language_svec_data(sparam_vals));
             // `rt` is gc-rooted by the caller
             static_rt = true;
         }
@@ -1442,24 +1442,24 @@ static const std::string verify_ccall_sig(code_value_t *&rt, code_value_t *at,
 const int fc_args_start = 6;
 
 // Expr(:foreigncall, pointer, rettype, (argtypes...), nreq, [cconv | (cconv, effects)], args..., roots...)
-static code_cgval_t emit_ccall(code_codectx_t &ctx, code_value_t **args, size_t nargs)
+static language_cgval_t emit_ccall(language_languagectx_t &ctx, language_value_t **args, size_t nargs)
 {
     JL_NARGSV(ccall, 5);
     args -= 1;
-    code_value_t *rt = args[2];
-    code_value_t *at = args[3];
-    size_t nccallargs = code_svec_len(at);
-    size_t nreqargs = code_unbox_long(args[4]); // if vararg
-    assert(code_is_quotenode(args[5]));
-    code_value_t *codecc = code_quotenode_value(args[5]);
-    code_sym_t *cc_sym = NULL;
-    if (code_is_symbol(codecc)) {
-        cc_sym = (code_sym_t*)codecc;
+    language_value_t *rt = args[2];
+    language_value_t *at = args[3];
+    size_t nccallargs = language_svec_len(at);
+    size_t nreqargs = language_unbox_long(args[4]); // if vararg
+    assert(language_is_quotenode(args[5]));
+    language_value_t *languagecc = language_quotenode_value(args[5]);
+    language_sym_t *cc_sym = NULL;
+    if (language_is_symbol(languagecc)) {
+        cc_sym = (language_sym_t*)languagecc;
     }
-    else if (code_is_tuple(codecc)) {
-        cc_sym = (code_sym_t*)code_get_nth_field_noalloc(codecc, 0);
+    else if (language_is_tuple(languagecc)) {
+        cc_sym = (language_sym_t*)language_get_nth_field_noalloc(languagecc, 0);
     }
-    assert(code_is_symbol(cc_sym));
+    assert(language_is_symbol(cc_sym));
     native_sym_arg_t symarg = {};
     JL_GC_PUSH3(&rt, &at, &symarg.gcroot);
 
@@ -1468,36 +1468,36 @@ static code_cgval_t emit_ccall(code_codectx_t &ctx, code_value_t **args, size_t 
     std::tie(cc, llvmcall) = convert_cconv(cc_sym);
 
     interpret_symbol_arg(ctx, symarg, args[1], /*ccall=*/true, llvmcall);
-    Value *&code_ptr = symarg.code_ptr;
+    Value *&language_ptr = symarg.language_ptr;
     void (*&fptr)(void) = symarg.fptr;
     const char *&f_name = symarg.f_name;
     const char *&f_lib = symarg.f_lib;
 
-    if (f_name == NULL && fptr == NULL && code_ptr == NULL) {
+    if (f_name == NULL && fptr == NULL && language_ptr == NULL) {
         if (symarg.gcroot != NULL) { // static_eval(ctx, args[1]) could not be interpreted to a function pointer
             const char *errmsg = invalid_symbol_err_msg(/*ccall=*/true);
-            code_cgval_t arg1 = emit_expr(ctx, args[1]);
-            emit_type_error(ctx, arg1, literal_pointer_val(ctx, (code_value_t *)code_pointer_type), errmsg);
+            language_cgval_t arg1 = emit_expr(ctx, args[1]);
+            emit_type_error(ctx, arg1, literal_pointer_val(ctx, (language_value_t *)language_pointer_type), errmsg);
         } else {
             emit_error(ctx, "ccall: null function pointer");
         }
         JL_GC_POP();
-        return code_cgval_t();
+        return language_cgval_t();
     }
 
-    auto _is_libcode_func = [&] (uintptr_t ptr, StringRef name) {
+    auto _is_liblanguage_func = [&] (uintptr_t ptr, StringRef name) {
         if ((uintptr_t)fptr == ptr)
             return true;
         if (f_lib) {
             if ((f_lib == JL_EXE_LIBNAME) || // preventing invalid pointer access
-                (f_lib == JL_LIBCODE_INTERNAL_DL_LIBNAME) ||
-                (f_lib == JL_LIBCODE_DL_LIBNAME)) {
-                // libcode-like
+                (f_lib == JL_LIBLANGUAGE_INTERNAL_DL_LIBNAME) ||
+                (f_lib == JL_LIBLANGUAGE_DL_LIBNAME)) {
+                // liblanguage-like
             }
             else
 #ifdef _OS_WINDOWS_
-            if (strcmp(f_lib, code_crtdll_basename) == 0) {
-                // libcode-like
+            if (strcmp(f_lib, language_crtdll_basename) == 0) {
+                // liblanguage-like
             }
             else
 #endif
@@ -1505,42 +1505,42 @@ static code_cgval_t emit_ccall(code_codectx_t &ctx, code_value_t **args, size_t 
         }
         return f_name && f_name == name;
     };
-#define is_libcode_func(name) _is_libcode_func((uintptr_t)&(name), StringRef(XSTR(name)))
+#define is_liblanguage_func(name) _is_liblanguage_func((uintptr_t)&(name), StringRef(XSTR(name)))
 
     // emit arguments
-    SmallVector<code_cgval_t, 4> argv(nccallargs);
+    SmallVector<language_cgval_t, 4> argv(nccallargs);
     for (size_t i = 0; i < nccallargs; i++) {
-        // Code (expression) value of current parameter
+        // Language (expression) value of current parameter
         assert(i < nccallargs && i + fc_args_start <= nargs);
-        code_value_t *argi = args[fc_args_start + i];
+        language_value_t *argi = args[fc_args_start + i];
         argv[i] = emit_expr(ctx, argi);
-        if (argv[i].typ == code_bottom_type) {
+        if (argv[i].typ == language_bottom_type) {
             JL_GC_POP();
-            return code_cgval_t();
+            return language_cgval_t();
         }
     }
 
     // emit roots
     SmallVector<Value*> gc_uses;
     for (size_t i = nccallargs + fc_args_start; i <= nargs; i++) {
-        // Code (expression) value of current parameter gcroot
-        code_value_t *argi_root = args[i];
-        if (code_is_long(argi_root))
+        // Language (expression) value of current parameter gcroot
+        language_value_t *argi_root = args[i];
+        if (language_is_long(argi_root))
             continue;
-        code_cgval_t arg_root = emit_expr(ctx, argi_root);
+        language_cgval_t arg_root = emit_expr(ctx, argi_root);
         gc_uses.append(get_gc_roots_for(ctx, arg_root));
     }
 
-    code_unionall_t *unionall = (code_is_method(ctx.linfo->def.method) && code_is_unionall(ctx.linfo->def.method->sig))
-        ? (code_unionall_t*)ctx.linfo->def.method->sig
+    language_unionall_t *unionall = (language_is_method(ctx.linfo->def.method) && language_is_unionall(ctx.linfo->def.method->sig))
+        ? (language_unionall_t*)ctx.linfo->def.method->sig
         : NULL;
 
-    if (code_is_abstract_ref_type(rt)) {
-        if (!verify_ref_type(ctx, code_tparam0(rt), unionall, 0, "ccall")) {
+    if (language_is_abstract_ref_type(rt)) {
+        if (!verify_ref_type(ctx, language_tparam0(rt), unionall, 0, "ccall")) {
             JL_GC_POP();
-            return code_cgval_t();
+            return language_cgval_t();
         }
-        rt = (code_value_t*)code_any_type; // convert return type to code_value_t*
+        rt = (language_value_t*)language_any_type; // convert return type to language_value_t*
     }
 
     // some sanity checking and check whether there's a vararg
@@ -1560,31 +1560,31 @@ static code_cgval_t emit_ccall(code_codectx_t &ctx, code_value_t **args, size_t 
     if (err.empty()) {
         // some extra checks for ccall
         if (!retboxed && static_rt) {
-            if (!code_is_concrete_type(rt)) {
-                if (code_is_cpointer_type(rt))
+            if (!language_is_concrete_type(rt)) {
+                if (language_is_cpointer_type(rt))
                     err = "return type Ptr should have an element type (not Ptr{<:T})";
-                else if (rt != code_bottom_type)
+                else if (rt != language_bottom_type)
                     err = "return type must be a concrete DataType";
             }
         }
-        assert(code_svec_len(at) >= nreqargs);
+        assert(language_svec_len(at) >= nreqargs);
     }
     if (!err.empty()) {
         emit_error(ctx, "ccall " + err);
         JL_GC_POP();
-        return code_cgval_t();
+        return language_cgval_t();
     }
-    if (rt != args[2] && rt != (code_value_t*)code_any_type)
-        rt = code_ensure_rooted(ctx, rt);
+    if (rt != args[2] && rt != (language_value_t*)language_any_type)
+        rt = language_ensure_rooted(ctx, rt);
     function_sig_t sig("ccall", lrt, rt, retboxed,
-                       (code_svec_t*)at, unionall, nreqargs,
+                       (language_svec_t*)at, unionall, nreqargs,
                        cc, llvmcall, &ctx.emission_context);
     for (size_t i = 0; i < nccallargs; i++) {
-        code_value_t *tti = code_svecref(at, i);
-        if (code_is_abstract_ref_type(tti)) {
-            if (!verify_ref_type(ctx, code_tparam0(tti), unionall, i + 1, "ccall")) {
+        language_value_t *tti = language_svecref(at, i);
+        if (language_is_abstract_ref_type(tti)) {
+            if (!verify_ref_type(ctx, language_tparam0(tti), unionall, i + 1, "ccall")) {
                 JL_GC_POP();
-                return code_cgval_t();
+                return language_cgval_t();
             }
         }
     }
@@ -1592,39 +1592,39 @@ static code_cgval_t emit_ccall(code_codectx_t &ctx, code_value_t **args, size_t 
     // some special functions
     bool isVa = nreqargs > 0;
     (void)isVa; // prevent compiler warning
-    if (is_libcode_func(code_value_ptr)) {
-        ++CCALL_STAT(code_value_ptr);
-        assert(retboxed ? lrt == ctx.types().T_prcodevalue : lrt == ctx.types().T_ptr);
+    if (is_liblanguage_func(language_value_ptr)) {
+        ++CCALL_STAT(language_value_ptr);
+        assert(retboxed ? lrt == ctx.types().T_prlanguagevalue : lrt == ctx.types().T_ptr);
         assert(!isVa && !llvmcall && nccallargs == 1);
-        code_value_t *tti = code_svecref(at, 0);
+        language_value_t *tti = language_svecref(at, 0);
         Type *largty;
         bool isboxed;
-        if (code_is_abstract_ref_type(tti)) {
-            tti = (code_value_t*)code_voidpointer_type;
+        if (language_is_abstract_ref_type(tti)) {
+            tti = (language_value_t*)language_voidpointer_type;
             largty = ctx.types().T_ptr;
             isboxed = false;
         }
         else {
-            largty = _code_struct_to_llvm(&ctx.emission_context, ctx.builder.getContext(), tti, &isboxed, llvmcall);
+            largty = _language_struct_to_llvm(&ctx.emission_context, ctx.builder.getContext(), tti, &isboxed, llvmcall);
         }
         Value *retval;
         if (isboxed) {
             retval = boxed(ctx, argv[0]);
-            retval = emit_pointer_from_objref(ctx, retval /*T_prcodevalue*/);
+            retval = emit_pointer_from_objref(ctx, retval /*T_prlanguagevalue*/);
         }
         else {
             retval = emit_unbox(ctx, largty, argv[0], tti);
         }
-        // retval is now an untracked code_value_t*
+        // retval is now an untracked language_value_t*
         if (retboxed)
             // WARNING: this addrspace cast necessarily implies that the value is rooted elsewhere!
-            retval = ctx.builder.CreateAddrSpaceCast(retval, ctx.types().T_prcodevalue);
+            retval = ctx.builder.CreateAddrSpaceCast(retval, ctx.types().T_prlanguagevalue);
         JL_GC_POP();
         return mark_or_box_ccall_result(ctx, retval, retboxed, rt, unionall, static_rt);
     }
-    else if (is_libcode_func(code_cpu_pause)||is_libcode_func(code_cpu_suspend)) {
-        ++CCALL_STAT(code_cpu_pause);
-        // Keep in sync with the code_threads.h version
+    else if (is_liblanguage_func(language_cpu_pause)||is_liblanguage_func(language_cpu_suspend)) {
+        ++CCALL_STAT(language_cpu_pause);
+        // Keep in sync with the language_threads.h version
         assert(lrt == getVoidTy(ctx.builder.getContext()));
         assert(!isVa && !llvmcall && nccallargs == 0);
 #ifdef __MIC__
@@ -1635,14 +1635,14 @@ static code_cgval_t emit_ccall(code_codectx_t &ctx, code_value_t **args, size_t 
                                                 "~{memory}", true);
             ctx.builder.CreateCall(pauseinst);
             JL_GC_POP();
-            return ghostValue(ctx, code_nothing_type);
+            return ghostValue(ctx, language_nothing_type);
         } else if (ctx.emission_context.TargetTriple.isAArch64()
                     || (ctx.emission_context.TargetTriple.isARM()
                         && ctx.emission_context.TargetTriple.getSubArch() != Triple::SubArchType::NoSubArch
                         // ARMv7 and above is < armv6
                         && ctx.emission_context.TargetTriple.getSubArch() < Triple::SubArchType::ARMSubArch_v6)) {
             InlineAsm* wait_inst;
-            if (is_libcode_func(code_cpu_pause))
+            if (is_liblanguage_func(language_cpu_pause))
                 wait_inst = InlineAsm::get(FunctionType::get(getVoidTy(ctx.builder.getContext()), false), "isb",
                                                 "~{memory}", true);
             else
@@ -1650,21 +1650,21 @@ static code_cgval_t emit_ccall(code_codectx_t &ctx, code_value_t **args, size_t 
                                                 "~{memory}", true);
             ctx.builder.CreateCall(wait_inst);
             JL_GC_POP();
-            return ghostValue(ctx, code_nothing_type);
+            return ghostValue(ctx, language_nothing_type);
         } else {
             JL_GC_POP();
-            return ghostValue(ctx, code_nothing_type);
+            return ghostValue(ctx, language_nothing_type);
         }
 #endif
     }
-    else if (is_libcode_func(code_cpu_wake)) {
-        ++CCALL_STAT(code_cpu_wake);
-        // Keep in sync with the code_threads.h version
+    else if (is_liblanguage_func(language_cpu_wake)) {
+        ++CCALL_STAT(language_cpu_wake);
+        // Keep in sync with the language_threads.h version
         assert(lrt == getVoidTy(ctx.builder.getContext()));
         assert(!isVa && !llvmcall && nccallargs == 0);
 #if JL_CPU_WAKE_NOOP == 1
         JL_GC_POP();
-        return ghostValue(ctx, code_nothing_type);
+        return ghostValue(ctx, language_nothing_type);
 #endif
         if (ctx.emission_context.TargetTriple.isAArch64()
             || (ctx.emission_context.TargetTriple.isARM()
@@ -1675,68 +1675,68 @@ static code_cgval_t emit_ccall(code_codectx_t &ctx, code_value_t **args, size_t 
                                                 "~{memory}", true);
             ctx.builder.CreateCall(sevinst);
             JL_GC_POP();
-            return ghostValue(ctx, code_nothing_type);
+            return ghostValue(ctx, language_nothing_type);
         }
     }
-    else if (is_libcode_func(code_gc_safepoint)) {
-        ++CCALL_STAT(code_gc_safepoint);
+    else if (is_liblanguage_func(language_gc_safepoint)) {
+        ++CCALL_STAT(language_gc_safepoint);
         assert(lrt == getVoidTy(ctx.builder.getContext()));
         assert(!isVa && !llvmcall && nccallargs == 0);
         JL_GC_POP();
         ctx.builder.CreateCall(prepare_call(gcroot_flush_func));
         emit_gc_safepoint(ctx.builder, ctx.types().T_size, get_current_ptls(ctx), ctx.tbaa().tbaa_const);
-        return ghostValue(ctx, code_nothing_type);
+        return ghostValue(ctx, language_nothing_type);
     }
-    else if (is_libcode_func("code_get_ptls_states")) {
-        ++CCALL_STAT(code_get_ptls_states);
+    else if (is_liblanguage_func("language_get_ptls_states")) {
+        ++CCALL_STAT(language_get_ptls_states);
         assert(lrt == ctx.types().T_size);
         assert(!isVa && !llvmcall && nccallargs == 0);
         JL_GC_POP();
         return mark_or_box_ccall_result(ctx, get_current_ptls(ctx), retboxed, rt, unionall, static_rt);
     }
-    else if (is_libcode_func(code_threadid)) {
-        ++CCALL_STAT(code_threadid);
+    else if (is_liblanguage_func(language_threadid)) {
+        ++CCALL_STAT(language_threadid);
         assert(lrt == getInt16Ty(ctx.builder.getContext()));
         assert(!isVa && !llvmcall && nccallargs == 0);
         JL_GC_POP();
         Value *ptask = get_current_task(ctx);
-        const int tid_offset = offsetof(code_task_t, tid);
+        const int tid_offset = offsetof(language_task_t, tid);
         Value *ptid = ctx.builder.CreateInBoundsGEP(getInt8Ty(ctx.builder.getContext()), ptask, ConstantInt::get(ctx.types().T_size, tid_offset / sizeof(int8_t)));
         setName(ctx.emission_context, ptid, "thread_id_ptr");
         LoadInst *tid = ctx.builder.CreateAlignedLoad(getInt16Ty(ctx.builder.getContext()), ptid, Align(sizeof(int16_t)));
         setName(ctx.emission_context, tid, "thread_id");
-        code_aliasinfo_t ai = code_aliasinfo_t::fromTBAA(ctx, ctx.tbaa().tbaa_gcframe);
+        language_aliasinfo_t ai = language_aliasinfo_t::fromTBAA(ctx, ctx.tbaa().tbaa_gcframe);
         ai.decorateInst(tid);
         return mark_or_box_ccall_result(ctx, tid, retboxed, rt, unionall, static_rt);
     }
-    else if (is_libcode_func(code_get_tls_world_age)) {
-        bool toplevel = !(ctx.linfo && code_is_method(ctx.linfo->def.method));
-        if (!toplevel) { // top level code does not see a stable world age during execution
-            ++CCALL_STAT(code_get_tls_world_age);
+    else if (is_liblanguage_func(language_get_tls_world_age)) {
+        bool toplevel = !(ctx.linfo && language_is_method(ctx.linfo->def.method));
+        if (!toplevel) { // top level language does not see a stable world age during execution
+            ++CCALL_STAT(language_get_tls_world_age);
             assert(lrt == ctx.types().T_size);
             assert(!isVa && !llvmcall && nccallargs == 0);
             JL_GC_POP();
             Instruction *world_age = cast<Instruction>(ctx.world_age_at_entry);
             setName(ctx.emission_context, world_age, "task_world_age");
-            code_aliasinfo_t ai = code_aliasinfo_t::fromTBAA(ctx, ctx.tbaa().tbaa_gcframe);
+            language_aliasinfo_t ai = language_aliasinfo_t::fromTBAA(ctx, ctx.tbaa().tbaa_gcframe);
             ai.decorateInst(world_age);
             return mark_or_box_ccall_result(ctx, world_age, retboxed, rt, unionall, static_rt);
         }
     }
-    else if (is_libcode_func(code_gc_disable_finalizers_internal)
+    else if (is_liblanguage_func(language_gc_disable_finalizers_internal)
 #ifdef NDEBUG
-             || is_libcode_func(code_gc_enable_finalizers_internal)
+             || is_liblanguage_func(language_gc_enable_finalizers_internal)
 #endif
              ) {
         JL_GC_POP();
         Value *ptls_p = get_current_ptls(ctx);
-        const int finh_offset = offsetof(code_tls_states_t, finalizers_inhibited);
+        const int finh_offset = offsetof(language_tls_states_t, finalizers_inhibited);
         Value *pfinh = ctx.builder.CreateInBoundsGEP(getInt8Ty(ctx.builder.getContext()), ptls_p, ConstantInt::get(ctx.types().T_size, finh_offset / sizeof(int8_t)));
         setName(ctx.emission_context, pfinh, "finalizers_inhibited_ptr");
         LoadInst *finh = ctx.builder.CreateAlignedLoad(getInt32Ty(ctx.builder.getContext()), pfinh, Align(sizeof(int32_t)));
         setName(ctx.emission_context, finh, "finalizers_inhibited");
         Value *newval;
-        if (is_libcode_func(code_gc_disable_finalizers_internal)) {
+        if (is_liblanguage_func(language_gc_disable_finalizers_internal)) {
             newval = ctx.builder.CreateAdd(finh, ConstantInt::get(getInt32Ty(ctx.builder.getContext()), 1));
             setName(ctx.emission_context, newval, "finalizers_inhibited_inc");
         }
@@ -1747,30 +1747,30 @@ static code_cgval_t emit_ccall(code_codectx_t &ctx, code_value_t **args, size_t 
             setName(ctx.emission_context, newval, "finalizers_inhibited_dec");
         }
         ctx.builder.CreateStore(newval, pfinh);
-        return ghostValue(ctx, code_nothing_type);
+        return ghostValue(ctx, language_nothing_type);
     }
-    else if (is_libcode_func(code_get_current_task)) {
-        ++CCALL_STAT(code_get_current_task);
-        assert(lrt == ctx.types().T_prcodevalue);
+    else if (is_liblanguage_func(language_get_current_task)) {
+        ++CCALL_STAT(language_get_current_task);
+        assert(lrt == ctx.types().T_prlanguagevalue);
         assert(!isVa && !llvmcall && nccallargs == 0);
         JL_GC_POP();
-        auto ct = track_pcodevalue(ctx, get_current_task(ctx));
+        auto ct = track_planguagevalue(ctx, get_current_task(ctx));
         return mark_or_box_ccall_result(ctx, ct, retboxed, rt, unionall, static_rt);
     }
-    else if (is_libcode_func(code_set_next_task)) {
-        ++CCALL_STAT(code_set_next_task);
+    else if (is_liblanguage_func(language_set_next_task)) {
+        ++CCALL_STAT(language_set_next_task);
         assert(lrt == getVoidTy(ctx.builder.getContext()));
         assert(!isVa && !llvmcall && nccallargs == 1);
         JL_GC_POP();
         Value *ptls_pv = get_current_ptls(ctx);
-        const int nt_offset = offsetof(code_tls_states_t, next_task);
-        Value *pnt = ctx.builder.CreateInBoundsGEP(ctx.types().T_pcodevalue, ptls_pv, ConstantInt::get(ctx.types().T_size, nt_offset / sizeof(void*)));
+        const int nt_offset = offsetof(language_tls_states_t, next_task);
+        Value *pnt = ctx.builder.CreateInBoundsGEP(ctx.types().T_planguagevalue, ptls_pv, ConstantInt::get(ctx.types().T_size, nt_offset / sizeof(void*)));
         setName(ctx.emission_context, pnt, "next_task_ptr");
         ctx.builder.CreateStore(emit_pointer_from_objref(ctx, boxed(ctx, argv[0])), pnt);
-        return ghostValue(ctx, code_nothing_type);
+        return ghostValue(ctx, language_nothing_type);
     }
-    else if (is_libcode_func(code_sigatomic_begin)) {
-        ++CCALL_STAT(code_sigatomic_begin);
+    else if (is_liblanguage_func(language_sigatomic_begin)) {
+        ++CCALL_STAT(language_sigatomic_begin);
         assert(lrt == getVoidTy(ctx.builder.getContext()));
         assert(!isVa && !llvmcall && nccallargs == 0);
         JL_GC_POP();
@@ -1783,10 +1783,10 @@ static code_cgval_t emit_ccall(code_codectx_t &ctx, code_value_t **args, size_t 
         setName(ctx.emission_context, defer_sig, "defer_signal_inc");
         ctx.builder.CreateStore(defer_sig, pdefer_sig);
         emit_signal_fence(ctx);
-        return ghostValue(ctx, code_nothing_type);
+        return ghostValue(ctx, language_nothing_type);
     }
-    else if (is_libcode_func(code_sigatomic_end)) {
-        ++CCALL_STAT(code_sigatomic_end);
+    else if (is_liblanguage_func(language_sigatomic_end)) {
+        ++CCALL_STAT(language_sigatomic_end);
         assert(lrt == getVoidTy(ctx.builder.getContext()));
         assert(!isVa && !llvmcall && nccallargs == 0);
         JL_GC_POP();
@@ -1822,55 +1822,55 @@ static code_cgval_t emit_ccall(code_codectx_t &ctx, code_value_t **args, size_t 
         ctx.builder.CreateBr(contBB);
         contBB->insertInto(ctx.f);
         ctx.builder.SetInsertPoint(contBB);
-        return ghostValue(ctx, code_nothing_type);
+        return ghostValue(ctx, language_nothing_type);
     }
-    else if (is_libcode_func(code_string_ptr)) {
-        ++CCALL_STAT(code_string_ptr);
+    else if (is_liblanguage_func(language_string_ptr)) {
+        ++CCALL_STAT(language_string_ptr);
         assert(lrt == ctx.types().T_ptr);
         assert(!isVa && !llvmcall && nccallargs == 1);
-        auto obj = emit_pointer_from_objref(ctx, boxed(ctx, argv[0])); // T_pprcodevalue
+        auto obj = emit_pointer_from_objref(ctx, boxed(ctx, argv[0])); // T_pprlanguagevalue
         // The inbounds gep makes it more clear to LLVM that the resulting value is not
         // a null pointer.
-        auto strp = ctx.builder.CreateConstInBoundsGEP1_32(ctx.types().T_prcodevalue, obj, 1);
+        auto strp = ctx.builder.CreateConstInBoundsGEP1_32(ctx.types().T_prlanguagevalue, obj, 1);
         setName(ctx.emission_context, strp, "string_ptr");
         JL_GC_POP();
         return mark_or_box_ccall_result(ctx, strp, retboxed, rt, unionall, static_rt);
     }
-    else if (is_libcode_func(code_symbol_name)) {
-        ++CCALL_STAT(code_symbol_name);
+    else if (is_liblanguage_func(language_symbol_name)) {
+        ++CCALL_STAT(language_symbol_name);
         assert(lrt == ctx.types().T_ptr);
         assert(!isVa && !llvmcall && nccallargs == 1);
-        auto obj = emit_pointer_from_objref(ctx, boxed(ctx, argv[0])); // T_pprcodevalue
+        auto obj = emit_pointer_from_objref(ctx, boxed(ctx, argv[0])); // T_pprlanguagevalue
         // The inbounds gep makes it more clear to LLVM that the resulting value is not
         // a null pointer.
         auto strp = ctx.builder.CreateConstInBoundsGEP1_32(
-            ctx.types().T_prcodevalue, obj, (sizeof(code_sym_t) + sizeof(void*) - 1) / sizeof(void*));
+            ctx.types().T_prlanguagevalue, obj, (sizeof(language_sym_t) + sizeof(void*) - 1) / sizeof(void*));
         setName(ctx.emission_context, strp, "symbol_name");
         JL_GC_POP();
         return mark_or_box_ccall_result(ctx, strp, retboxed, rt, unionall, static_rt);
     }
-    else if (is_libcode_func(code_genericmemory_owner) || is_libcode_func(icode_genericmemory_owner)) {
-        ++CCALL_STAT(code_genericmemory_owner);
-        assert(lrt == ctx.types().T_prcodevalue);
+    else if (is_liblanguage_func(language_genericmemory_owner) || is_liblanguage_func(ilanguage_genericmemory_owner)) {
+        ++CCALL_STAT(language_genericmemory_owner);
+        assert(lrt == ctx.types().T_prlanguagevalue);
         assert(!isVa && !llvmcall && nccallargs == 1);
         Value *obj = emit_genericmemoryowner(ctx, boxed(ctx, argv[0]));
         JL_GC_POP();
-        return mark_code_type(ctx, obj, true, code_any_type);
+        return mark_language_type(ctx, obj, true, language_any_type);
     }
-    else if (is_libcode_func(code_alloc_genericmemory)) {
-        ++CCALL_STAT(code_alloc_genericmemory);
-        assert(lrt == ctx.types().T_prcodevalue);
+    else if (is_liblanguage_func(language_alloc_genericmemory)) {
+        ++CCALL_STAT(language_alloc_genericmemory);
+        assert(lrt == ctx.types().T_prlanguagevalue);
         assert(!isVa && !llvmcall && nccallargs == 2);
-        const code_cgval_t &typ = argv[0];
-        const code_cgval_t &nel = argv[1];
+        const language_cgval_t &typ = argv[0];
+        const language_cgval_t &nel = argv[1];
         auto arg_typename = [&] JL_NOTSAFEPOINT {
             auto istyp = argv[0].constant;
             std::string type_str;
-            if (istyp && code_is_datatype(istyp) && code_is_genericmemory_type(istyp)){
-                auto eltype = code_tparam1(istyp);
-                if (code_is_datatype(eltype))
-                    type_str = code_symbol_name(((code_datatype_t*)eltype)->name->name);
-                else if (code_is_uniontype(eltype))
+            if (istyp && language_is_datatype(istyp) && language_is_genericmemory_type(istyp)){
+                auto eltype = language_tparam1(istyp);
+                if (language_is_datatype(eltype))
+                    type_str = language_symbol_name(((language_datatype_t*)eltype)->name->name);
+                else if (language_is_uniontype(eltype))
                     type_str = "Union";
                 else
                     type_str = "<unknown type>";
@@ -1879,78 +1879,78 @@ static code_cgval_t emit_ccall(code_codectx_t &ctx, code_value_t **args, size_t 
                 type_str = "<unknown type>";
             return "Memory{" + type_str + "}[]";
             };
-        auto alloc = ctx.builder.CreateCall(prepare_call(code_allocgenericmemory), { boxed(ctx,typ), emit_unbox(ctx, ctx.types().T_size, nel, (code_value_t*)code_ulong_type)});
+        auto alloc = ctx.builder.CreateCall(prepare_call(language_allocgenericmemory), { boxed(ctx,typ), emit_unbox(ctx, ctx.types().T_size, nel, (language_value_t*)language_ulong_type)});
         setName(ctx.emission_context, alloc, arg_typename);
         JL_GC_POP();
-        return mark_code_type(ctx, alloc, true, code_any_type);
+        return mark_language_type(ctx, alloc, true, language_any_type);
     }
-    else if (is_libcode_func(memcpy) && (rt == (code_value_t*)code_nothing_type || code_is_cpointer_type(rt))) {
+    else if (is_liblanguage_func(memcpy) && (rt == (language_value_t*)language_nothing_type || language_is_cpointer_type(rt))) {
         ++CCALL_STAT(memcpy);
-        const code_cgval_t &dst = argv[0];
-        const code_cgval_t &src = argv[1];
-        const code_cgval_t &n = argv[2];
-        Value *destp = emit_unbox(ctx, ctx.types().T_ptr, dst, (code_value_t*)code_voidpointer_type);
+        const language_cgval_t &dst = argv[0];
+        const language_cgval_t &src = argv[1];
+        const language_cgval_t &n = argv[2];
+        Value *destp = emit_unbox(ctx, ctx.types().T_ptr, dst, (language_value_t*)language_voidpointer_type);
 
         ctx.builder.CreateMemCpy(
                 destp,
                 MaybeAlign(1),
-                emit_unbox(ctx, ctx.types().T_ptr, src, (code_value_t*)code_voidpointer_type),
+                emit_unbox(ctx, ctx.types().T_ptr, src, (language_value_t*)language_voidpointer_type),
                 MaybeAlign(1),
-                emit_unbox(ctx, ctx.types().T_size, n, (code_value_t*)code_ulong_type),
+                emit_unbox(ctx, ctx.types().T_size, n, (language_value_t*)language_ulong_type),
                 false);
         JL_GC_POP();
-        return rt == (code_value_t*)code_nothing_type ? ghostValue(ctx, code_nothing_type) :
+        return rt == (language_value_t*)language_nothing_type ? ghostValue(ctx, language_nothing_type) :
             mark_or_box_ccall_result(ctx, destp, retboxed, rt, unionall, static_rt);
     }
-    else if (is_libcode_func(memset) && (rt == (code_value_t*)code_nothing_type || code_is_cpointer_type(rt))) {
+    else if (is_liblanguage_func(memset) && (rt == (language_value_t*)language_nothing_type || language_is_cpointer_type(rt))) {
         ++CCALL_STAT(memset);
-        const code_cgval_t &dst = argv[0];
-        const code_cgval_t &val = argv[1];
-        const code_cgval_t &n = argv[2];
-        Value *destp = emit_unbox(ctx, ctx.types().T_ptr, dst, (code_value_t*)code_voidpointer_type);
-        Value *val32 = emit_unbox(ctx, getInt32Ty(ctx.builder.getContext()), val, (code_value_t*)code_uint32_type);
+        const language_cgval_t &dst = argv[0];
+        const language_cgval_t &val = argv[1];
+        const language_cgval_t &n = argv[2];
+        Value *destp = emit_unbox(ctx, ctx.types().T_ptr, dst, (language_value_t*)language_voidpointer_type);
+        Value *val32 = emit_unbox(ctx, getInt32Ty(ctx.builder.getContext()), val, (language_value_t*)language_uint32_type);
         Value *val8 = ctx.builder.CreateTrunc(val32, getInt8Ty(ctx.builder.getContext()), "memset_val");
         ctx.builder.CreateMemSet(
             destp,
             val8,
-            emit_unbox(ctx, ctx.types().T_size, n, (code_value_t*)code_ulong_type),
+            emit_unbox(ctx, ctx.types().T_size, n, (language_value_t*)language_ulong_type),
             MaybeAlign(1)
         );
         JL_GC_POP();
-        return rt == (code_value_t*)code_nothing_type ? ghostValue(ctx, code_nothing_type) :
+        return rt == (language_value_t*)language_nothing_type ? ghostValue(ctx, language_nothing_type) :
             mark_or_box_ccall_result(ctx, destp, retboxed, rt, unionall, static_rt);
     }
-    else if (is_libcode_func(memmove) && (rt == (code_value_t*)code_nothing_type || code_is_cpointer_type(rt))) {
+    else if (is_liblanguage_func(memmove) && (rt == (language_value_t*)language_nothing_type || language_is_cpointer_type(rt))) {
         ++CCALL_STAT(memmove);
-        const code_cgval_t &dst = argv[0];
-        const code_cgval_t &src = argv[1];
-        const code_cgval_t &n = argv[2];
-        Value *destp = emit_unbox(ctx, ctx.types().T_ptr, dst, (code_value_t*)code_voidpointer_type);
+        const language_cgval_t &dst = argv[0];
+        const language_cgval_t &src = argv[1];
+        const language_cgval_t &n = argv[2];
+        Value *destp = emit_unbox(ctx, ctx.types().T_ptr, dst, (language_value_t*)language_voidpointer_type);
 
         ctx.builder.CreateMemMove(
                 destp,
                 MaybeAlign(0),
-                emit_unbox(ctx, ctx.types().T_ptr, src, (code_value_t*)code_voidpointer_type),
+                emit_unbox(ctx, ctx.types().T_ptr, src, (language_value_t*)language_voidpointer_type),
                 MaybeAlign(0),
-                emit_unbox(ctx, ctx.types().T_size, n, (code_value_t*)code_ulong_type),
+                emit_unbox(ctx, ctx.types().T_size, n, (language_value_t*)language_ulong_type),
                 false);
         JL_GC_POP();
-        return rt == (code_value_t*)code_nothing_type ? ghostValue(ctx, code_nothing_type) :
+        return rt == (language_value_t*)language_nothing_type ? ghostValue(ctx, language_nothing_type) :
             mark_or_box_ccall_result(ctx, destp, retboxed, rt, unionall, static_rt);
     }
-    else if (is_libcode_func(code_object_id) && nccallargs == 1 &&
-            rt == (code_value_t*)code_ulong_type) {
-        ++CCALL_STAT(code_object_id);
-        code_cgval_t val = argv[0];
-        if (val.typ == (code_value_t*)code_symbol_type) {
+    else if (is_liblanguage_func(language_object_id) && nccallargs == 1 &&
+            rt == (language_value_t*)language_ulong_type) {
+        ++CCALL_STAT(language_object_id);
+        language_cgval_t val = argv[0];
+        if (val.typ == (language_value_t*)language_symbol_type) {
             JL_GC_POP();
-            const int hash_offset = offsetof(code_sym_t, hash);
+            const int hash_offset = offsetof(language_sym_t, hash);
             Value *ph1 = decay_derived(ctx, boxed(ctx, val));
             Value *ph2 = ctx.builder.CreateInBoundsGEP(ctx.types().T_size, ph1, ConstantInt::get(ctx.types().T_size, hash_offset / ctx.types().sizeof_ptr));
             setName(ctx.emission_context, ph2, "object_id_ptr");
             LoadInst *hashval = ctx.builder.CreateAlignedLoad(ctx.types().T_size, ph2, ctx.types().alignof_ptr);
             setName(ctx.emission_context, hashval, "object_id");
-            code_aliasinfo_t ai = code_aliasinfo_t::fromTBAA(ctx, ctx.tbaa().tbaa_const);
+            language_aliasinfo_t ai = language_aliasinfo_t::fromTBAA(ctx, ctx.tbaa().tbaa_const);
             ai.decorateInst(hashval);
             return mark_or_box_ccall_result(ctx, hashval, retboxed, rt, unionall, static_rt);
         }
@@ -1965,14 +1965,14 @@ static code_cgval_t emit_ccall(code_codectx_t &ctx, code_value_t **args, size_t 
                 val.isghost ? ConstantPointerNull::get(T_p_derived) :
                         decay_derived(ctx, data_pointer(ctx, val))
             };
-            Value *ret = ctx.builder.CreateCall(prepare_call(code_object_id__func), ArrayRef<Value*>(args));
+            Value *ret = ctx.builder.CreateCall(prepare_call(language_object_id__func), ArrayRef<Value*>(args));
             setName(ctx.emission_context, ret, "object_id");
             JL_GC_POP();
             return mark_or_box_ccall_result(ctx, ret, retboxed, rt, unionall, static_rt);
         }
     }
 
-    code_cgval_t retval = sig.emit_a_ccall(
+    language_cgval_t retval = sig.emit_a_ccall(
             ctx,
             symarg,
             argv.data(),
@@ -1982,17 +1982,17 @@ static code_cgval_t emit_ccall(code_codectx_t &ctx, code_value_t **args, size_t 
     return retval;
 }
 
-code_cgval_t function_sig_t::emit_a_ccall(
-        code_codectx_t &ctx,
+language_cgval_t function_sig_t::emit_a_ccall(
+        language_languagectx_t &ctx,
         const native_sym_arg_t &symarg,
-        code_cgval_t *argv,
+        language_cgval_t *argv,
         SmallVectorImpl<Value*> &gc_uses,
         bool static_rt) const
 {
     ++EmittedCCalls;
     if (!err_msg.empty()) {
         emit_error(ctx, err_msg);
-        return code_cgval_t();
+        return language_cgval_t();
     }
 
     FunctionType *functype = this->functype(ctx.builder.getContext());
@@ -2000,38 +2000,38 @@ code_cgval_t function_sig_t::emit_a_ccall(
     SmallVector<Value *, 8> argvals(nccallargs + sret);
     for (size_t ai = 0; ai < nccallargs; ai++) {
         // Current C function parameter
-        code_cgval_t &arg = argv[ai];
-        code_value_t *jargty = code_svecref(at, ai); // Code type of the current parameter
+        language_cgval_t &arg = argv[ai];
+        language_value_t *jargty = language_svecref(at, ai); // Language type of the current parameter
         Type *largty = fargt[ai]; // LLVM type of the current parameter
         bool toboxed = fargt_isboxed[ai];
         Type *pargty = fargt_sig[ai + sret]; // LLVM coercion type
         bool byRef = byRefList[ai]; // Argument attributes
 
         // if we know the function sparams, try to fill those in now
-        // so that the code_to_native type checks are more likely to be doable (e.g. concrete types) at compile-time
-        code_value_t *jargty_in_env = jargty;
-        if (ctx.spvals_ptr == NULL && !toboxed && unionall_env && code_has_typevar_from_unionall(jargty, unionall_env) &&
-                code_svec_len(ctx.linfo->sparam_vals) > 0) {
-            jargty_in_env = code_instantiate_type_in_env(jargty_in_env, unionall_env, code_svec_data(ctx.linfo->sparam_vals));
+        // so that the language_to_native type checks are more likely to be doable (e.g. concrete types) at compile-time
+        language_value_t *jargty_in_env = jargty;
+        if (ctx.spvals_ptr == NULL && !toboxed && unionall_env && language_has_typevar_from_unionall(jargty, unionall_env) &&
+                language_svec_len(ctx.linfo->sparam_vals) > 0) {
+            jargty_in_env = language_instantiate_type_in_env(jargty_in_env, unionall_env, language_svec_data(ctx.linfo->sparam_vals));
             if (jargty_in_env != jargty)
-                jargty_in_env = code_ensure_rooted(ctx, jargty_in_env);
+                jargty_in_env = language_ensure_rooted(ctx, jargty_in_env);
         }
 
         Value *v;
-        if (code_is_abstract_ref_type(jargty)) {
-            if (!code_is_cpointer_type(arg.typ)) {
+        if (language_is_abstract_ref_type(jargty)) {
+            if (!language_is_cpointer_type(arg.typ)) {
                 emit_cpointercheck(ctx, arg, "ccall: argument to Ref{T} is not a pointer");
-                arg.typ = (code_value_t*)code_voidpointer_type;
+                arg.typ = (language_value_t*)language_voidpointer_type;
                 arg.isboxed = false;
             }
-            jargty_in_env = (code_value_t*)code_voidpointer_type;
+            jargty_in_env = (language_value_t*)language_voidpointer_type;
         }
 
-        v = code_to_native(ctx, largty, toboxed, jargty_in_env, unionall_env, arg, byRef, ai);
-        bool issigned = code_signed_type && code_subtype(jargty, (code_value_t*)code_signed_type);
+        v = language_to_native(ctx, largty, toboxed, jargty_in_env, unionall_env, arg, byRef, ai);
+        bool issigned = language_signed_type && language_subtype(jargty, (language_value_t*)language_signed_type);
         if (byRef) {
             v = decay_derived(ctx, v);
-            // code_to_native should already have done the alloca and store
+            // language_to_native should already have done the alloca and store
             assert(v->getType() == pargty);
         }
         else {
@@ -2039,21 +2039,21 @@ code_cgval_t function_sig_t::emit_a_ccall(
         }
 
         if (isa<UndefValue>(v)) {
-            return code_cgval_t();
+            return language_cgval_t();
         }
         assert(v->getType() == pargty);
         argvals[ai + sret] = v;
     }
 
     Value *result = NULL;
-    //This is only needed if !retboxed && srt && !coderetboxed
+    //This is only needed if !retboxed && srt && !languageretboxed
     Type *sretty = nullptr;
     // First, if the ABI requires us to provide the space for the return
     // argument, allocate the box and store that as the first argument type
     bool sretboxed = false;
     if (sret) {
-        assert(!retboxed && code_is_datatype(rt) && "sret return type invalid");
-        if (code_is_pointerfree(rt)) {
+        assert(!retboxed && language_is_datatype(rt) && "sret return type invalid");
+        if (language_is_pointerfree(rt)) {
             result = emit_static_alloca(ctx, lrt);
             setName(ctx.emission_context, result, "ccall_sret");
             sretty = lrt;
@@ -2062,10 +2062,10 @@ code_cgval_t function_sig_t::emit_a_ccall(
         else {
             // XXX: result needs to be zero'd and given a GC root here
             // and has incorrect write barriers.
-            // instead this code path should behave like `unsafe_load`
-            result = emit_allocobj(ctx, (code_datatype_t*)rt, true);
+            // instead this language path should behave like `unsafe_load`
+            result = emit_allocobj(ctx, (language_datatype_t*)rt, true);
             setName(ctx.emission_context, result, "ccall_sret_box");
-            sretty = ctx.types().T_codevalue;
+            sretty = ctx.types().T_languagevalue;
             sretboxed = true;
             gc_uses.push_back(result);
             argvals[0] = emit_pointer_from_objref(ctx, result);
@@ -2078,17 +2078,17 @@ code_cgval_t function_sig_t::emit_a_ccall(
     Value *llvmf;
     if (llvmcall) {
         ++EmittedLLVMCalls;
-        if (symarg.code_ptr != NULL) {
+        if (symarg.language_ptr != NULL) {
             emit_error(ctx, "llvmcall doesn't support dynamic pointers");
-            return code_cgval_t();
+            return language_cgval_t();
         }
         else if (symarg.fptr != NULL) {
             emit_error(ctx, "llvmcall doesn't support static pointers");
-            return code_cgval_t();
+            return language_cgval_t();
         }
         else if (symarg.f_lib != NULL) {
             emit_error(ctx, "llvmcall doesn't support dynamic libraries");
-            return code_cgval_t();
+            return language_cgval_t();
         }
         else {
             assert(symarg.f_name != NULL);
@@ -2096,7 +2096,7 @@ code_cgval_t function_sig_t::emit_a_ccall(
             bool f_extern = f_name.consume_front("extern ");
             llvmf = NULL;
             if (f_extern) {
-                llvmf = code_Module->getOrInsertFunction(f_name, functype).getCallee();
+                llvmf = language_Module->getOrInsertFunction(f_name, functype).getCallee();
                 if (!isa<Function>(llvmf) || cast<Function>(llvmf)->isIntrinsic() || cast<Function>(llvmf)->getFunctionType() != functype)
                     llvmf = NULL;
             }
@@ -2114,7 +2114,7 @@ code_cgval_t function_sig_t::emit_a_ccall(
                     if (res == Intrinsic::MatchIntrinsicTypes_Match) {
                         bool matchvararg = !Intrinsic::matchIntrinsicVarArg(functype->isVarArg(), TableRef);
                         if (matchvararg) {
-                            Function *intrinsic = Intrinsic::getDeclaration(code_Module, ID, overloadTys);
+                            Function *intrinsic = Intrinsic::getDeclaration(language_Module, ID, overloadTys);
                             assert(intrinsic->getFunctionType() == functype);
                             if (intrinsic->getName() == f_name || Intrinsic::getBaseName(ID) == f_name)
                                 llvmf = intrinsic;
@@ -2124,14 +2124,14 @@ code_cgval_t function_sig_t::emit_a_ccall(
             }
             if (llvmf == NULL) {
                 emit_error(ctx, "llvmcall only supports intrinsic calls");
-                return code_cgval_t();
+                return language_cgval_t();
             }
         }
     }
-    else if (symarg.code_ptr != NULL) {
+    else if (symarg.language_ptr != NULL) {
         ++LiteralCCalls;
-        null_pointer_check(ctx, symarg.code_ptr, nullptr);
-        llvmf = symarg.code_ptr;
+        null_pointer_check(ctx, symarg.language_ptr, nullptr);
+        llvmf = symarg.language_ptr;
     }
     else if (symarg.fptr != NULL) {
         ++LiteralCCalls;
@@ -2139,15 +2139,15 @@ code_cgval_t function_sig_t::emit_a_ccall(
         llvmf = literal_static_pointer_val((void*)(uintptr_t)symarg.fptr, funcptype);
         setName(ctx.emission_context, llvmf, "ccall_fptr");
         if (ctx.emission_context.imaging_mode)
-            code_printf(JL_STDERR,"WARNING: literal address used in ccall for %s; code cannot be statically compiled\n", symarg.f_name);
+            language_printf(JL_STDERR,"WARNING: literal address used in ccall for %s; language cannot be statically compiled\n", symarg.f_name);
     }
-    else if (!ctx.params->use_codeplt) {
+    else if (!ctx.params->use_languageplt) {
         if ((symarg.f_lib && !((symarg.f_lib == JL_EXE_LIBNAME) ||
-              (symarg.f_lib == JL_LIBCODE_INTERNAL_DL_LIBNAME) ||
-              (symarg.f_lib == JL_LIBCODE_DL_LIBNAME))) || symarg.lib_expr) {
+              (symarg.f_lib == JL_LIBLANGUAGE_INTERNAL_DL_LIBNAME) ||
+              (symarg.f_lib == JL_LIBLANGUAGE_DL_LIBNAME))) || symarg.lib_expr) {
             emit_error(ctx, "ccall: Had library expression, but symbol lookup was disabled");
         }
-        llvmf = code_Module->getOrInsertFunction(symarg.f_name, functype).getCallee();
+        llvmf = language_Module->getOrInsertFunction(symarg.f_name, functype).getCallee();
     }
     else {
         assert(symarg.f_name != NULL);
@@ -2167,7 +2167,7 @@ code_cgval_t function_sig_t::emit_a_ccall(
         }
     }
 
-    OperandBundleDef OpBundle("code_roots", gc_uses);
+    OperandBundleDef OpBundle("language_roots", gc_uses);
     // the actual call
     CallInst *ret = ctx.builder.CreateCall(functype, llvmf,
             argvals,
@@ -2182,77 +2182,77 @@ code_cgval_t function_sig_t::emit_a_ccall(
         ctx.f->addFnAttr(Attribute::StackProtectReq);
     }
 
-    if (rt == code_bottom_type) {
+    if (rt == language_bottom_type) {
         CreateTrap(ctx.builder);
-        return code_cgval_t();
+        return language_cgval_t();
     }
 
-    // Finally we need to box the result into code type
+    // Finally we need to box the result into language type
     // However, if we have already created a box for the return
     // type because the ABI required us to pass a pointer (sret),
     // then we do not need to do this.
-    bool coderetboxed;
+    bool languageretboxed;
     if (retboxed) {
         assert(!sret);
-        coderetboxed = true;
+        languageretboxed = true;
         ++RetBoxedCCalls;
     }
     else if (sret) {
-        coderetboxed = sretboxed;
-        if (!coderetboxed) {
+        languageretboxed = sretboxed;
+        if (!languageretboxed) {
             // something alloca'd above is SSA
             if (static_rt)
-                return mark_code_slot(result, rt, NULL, ctx.tbaa().tbaa_stack);
+                return mark_language_slot(result, rt, NULL, ctx.tbaa().tbaa_stack);
             ++SRetCCalls;
             result = ctx.builder.CreateLoad(sretty, result);
             setName(ctx.emission_context, result, "returned");
         }
     }
     else {
-        Type *codert = code_type_to_llvm(ctx, rt, &coderetboxed); // compute the real "coden" return type and compute whether it is boxed
-        if (type_is_ghost(codert)) {
+        Type *languagert = language_type_to_llvm(ctx, rt, &languageretboxed); // compute the real "languagen" return type and compute whether it is boxed
+        if (type_is_ghost(languagert)) {
             return ghostValue(ctx, rt);
         }
-        else if (code_is_datatype(rt) && code_is_datatype_singleton((code_datatype_t*)rt)) {
-            return mark_code_const(ctx, ((code_datatype_t*)rt)->instance);
+        else if (language_is_datatype(rt) && language_is_datatype_singleton((language_datatype_t*)rt)) {
+            return mark_language_const(ctx, ((language_datatype_t*)rt)->instance);
         }
-        else if (coderetboxed && !retboxed) {
-            assert(code_is_datatype(rt));
+        else if (languageretboxed && !retboxed) {
+            assert(language_is_datatype(rt));
             if (static_rt) {
-                Value *strct = emit_allocobj(ctx, (code_datatype_t*)rt, true);
+                Value *strct = emit_allocobj(ctx, (language_datatype_t*)rt, true);
                 setName(ctx.emission_context, strct, "ccall_ret_box");
-                MDNode *tbaa = code_is_mutable(rt) ? ctx.tbaa().tbaa_mutab : ctx.tbaa().tbaa_immut;
-                int boxalign = code_alignment(rt);
+                MDNode *tbaa = language_is_mutable(rt) ? ctx.tbaa().tbaa_mutab : ctx.tbaa().tbaa_immut;
+                int boxalign = language_alignment(rt);
                 // copy the data from the return value to the new struct
                 const DataLayout &DL = ctx.builder.GetInsertBlock()->getModule()->getDataLayout();
                 auto resultTy = result->getType();
-                size_t rtsz = code_datatype_size(rt);
+                size_t rtsz = language_datatype_size(rt);
                 if (DL.getTypeStoreSize(resultTy) > rtsz) {
-                    // ARM and AArch64 can use a LLVM type larger than the code type.
+                    // ARM and AArch64 can use a LLVM type larger than the language type.
                     // When this happens, cast through memory.
                     auto slot = emit_static_alloca(ctx, resultTy);
                     setName(ctx.emission_context, slot, "type_pun_slot");
                     slot->setAlignment(Align(boxalign));
                     ctx.builder.CreateAlignedStore(result, slot, Align(boxalign));
-                    code_aliasinfo_t ai = code_aliasinfo_t::fromTBAA(ctx, tbaa);
+                    language_aliasinfo_t ai = language_aliasinfo_t::fromTBAA(ctx, tbaa);
                     emit_memcpy(ctx, strct, ai, slot, ai, rtsz, boxalign, boxalign);
                 }
                 else {
                     init_bits_value(ctx, strct, result, tbaa, boxalign);
                 }
-                return mark_code_type(ctx, strct, true, rt);
+                return mark_language_type(ctx, strct, true, rt);
             }
-            coderetboxed = false; // trigger mark_or_box_ccall_result to build the runtime box
+            languageretboxed = false; // trigger mark_or_box_ccall_result to build the runtime box
         }
         else if (lrt != prt) {
-            assert(codert == lrt || !lrt->isStructTy()); // code_type_to_llvm and code_struct_to_llvm should be returning the same StructType
+            assert(languagert == lrt || !lrt->isStructTy()); // language_type_to_llvm and language_struct_to_llvm should be returning the same StructType
             result = llvm_type_rewrite(ctx, result, lrt, false);
         }
     }
 
-    return mark_or_box_ccall_result(ctx, result, coderetboxed, rt, unionall_env, static_rt);
+    return mark_or_box_ccall_result(ctx, result, languageretboxed, rt, unionall_env, static_rt);
 }
 
-// Reset us back to codegen debug type
+// Reset us back to languagegen debug type
 #undef DEBUG_TYPE
-#define DEBUG_TYPE "code_irgen_codegen"
+#define DEBUG_TYPE "language_irgen_languagegen"
