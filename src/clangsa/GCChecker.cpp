@@ -1,18 +1,24 @@
 /*
- * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
+ * Copyright (c) 2024, NeXTech Corporation. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
-  *
+ *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * version 2 for more details (a copy is included in the LICENSE file that
  * accompanied this code).
  *
- * Contact with ITGSS, 651 N Broad St, Suite 201, in the
- * city of Middletown, zip code 19709, and county of New Castle, state of Delaware.
+ * Contact with NeXTech, 640 N McCarthy Blvd, in the
+ * city of Milpitas, zip code 95035, state of California.
  * or visit www.it-gss.com if you need additional information or have any
  * questions.
+ *
  */
+
+// About:
+// Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
+// Date: Wednesday, June 6, 2024
+// Technology: C++20 - ISO/IEC 14882:2020(E) 
 
 #include "clang/AST/Type.h"
 #include "clang/Frontend/FrontendActions.h"
@@ -152,7 +158,7 @@ public:
     static ValueState getForArgument(const FunctionDecl *FD,
                                      const ParmVarDecl *PVD,
                                      bool isFunctionSafepoint) {
-      bool maybeUnrooted = declHasAnnotation(PVD, "language_maybe_unrooted");
+      bool maybeUnrooted = declHasAnnotation(PVD, "julia_maybe_unrooted");
       if (!isFunctionSafepoint || maybeUnrooted) {
         ValueState VS = getAllocated();
         VS.PVD = PVD;
@@ -399,16 +405,16 @@ PDP GCChecker::SafepointBugVisitor::VisitNode(const ExplodedNode *N,
   unsigned OldSafepointDisabled = PrevN->getState()->get<SafepointDisabledAt>();
   if (NewSafepointDisabled != OldSafepointDisabled) {
     const Decl *D = &N->getCodeDecl();
-    const AnnotateAttr *Ann = declHasAnnotation(D, "language_not_safepoint");
+    const AnnotateAttr *Ann = declHasAnnotation(D, "julia_not_safepoint");
     PathDiagnosticLocation Pos;
     if (OldSafepointDisabled == (unsigned)-1) {
       if (Ann) {
         Pos = PathDiagnosticLocation{Ann->getLoc(), BRC.getSourceManager()};
-        return MakePDP(Pos, "Tracking LANGUAGE_NOT_SAFEPOINT annotation here.");
+        return MakePDP(Pos, "Tracking CODE_NOT_SAFEPOINT annotation here.");
       } else {
         PathDiagnosticLocation Pos = PathDiagnosticLocation::createDeclBegin(
             N->getLocationContext(), BRC.getSourceManager());
-        return MakePDP(Pos, "Tracking LANGUAGE_NOT_SAFEPOINT annotation here.");
+        return MakePDP(Pos, "Tracking CODE_NOT_SAFEPOINT annotation here.");
       }
     } else if (NewSafepointDisabled == (unsigned)-1) {
       PathDiagnosticLocation Pos = PathDiagnosticLocation::createDeclBegin(
@@ -441,7 +447,7 @@ PDP GCChecker::GCValueBugVisitor::ExplainNoPropagationFromExpr(
                                                 BRC.getSourceManager()));
       const VarDecl *VD = VR->getDecl();
       if (VD) {
-        if (!declHasAnnotation(VD, "language_globally_rooted")) {
+        if (!declHasAnnotation(VD, "julia_globally_rooted")) {
           return MakePDP(Pos, "Argument value was derived from unrooted "
                               "global. May need GLOBALLY_ROOTED annotation.");
         } else if (!isGCTrackedType(VD->getType())) {
@@ -491,7 +497,7 @@ PDP GCChecker::GCValueBugVisitor::ExplainNoPropagation(
     if (!FD)
       return nullptr;
     for (unsigned i = 0; i < FD->getNumParams(); ++i) {
-      if (!declHasAnnotation(FD->getParamDecl(i), "language_propagates_root"))
+      if (!declHasAnnotation(FD->getParamDecl(i), "julia_propagates_root"))
         continue;
       return ExplainNoPropagationFromExpr(CE->getArg(i), N, Pos, BRC, BR);
     }
@@ -524,7 +530,7 @@ PDP GCChecker::GCValueBugVisitor::VisitNode(const ExplodedNode *N,
         bool isFunctionSafepoint =
             !isFDAnnotatedNotSafepoint(NewValueState->FD, BRC.getSourceManager());
         bool maybeUnrooted =
-            declHasAnnotation(NewValueState->PVD, "language_maybe_unrooted");
+            declHasAnnotation(NewValueState->PVD, "julia_maybe_unrooted");
         assert(isFunctionSafepoint || maybeUnrooted);
         (void)maybeUnrooted;
         Pos =
@@ -693,13 +699,13 @@ void GCChecker::checkBeginFunction(CheckerContext &C) const {
     State = State->set<SafepointDisabledAt>((unsigned)-1);
     Change = true;
   }
-  if (gcEnabledHere(State) && declHasAnnotation(FD, "language_gc_disabled")) {
+  if (gcEnabledHere(State) && declHasAnnotation(FD, "julia_gc_disabled")) {
     State = State->set<GCDisabledAt>(CurrentHeight);
     Change = true;
   }
   bool isFunctionSafepoint = !isFDAnnotatedNotSafepoint(FD, getSM(C));
   if (safepointEnabledHere(State) &&
-      (!isFunctionSafepoint || declHasAnnotation(FD, "language_notsafepoint_leave"))) {
+      (!isFunctionSafepoint || declHasAnnotation(FD, "julia_notsafepoint_leave"))) {
     State = State->set<SafepointDisabledAt>(CurrentHeight);
     Change = true;
   }
@@ -709,7 +715,7 @@ void GCChecker::checkBeginFunction(CheckerContext &C) const {
     return;
   }
   for (const auto P : FD->parameters()) {
-    if (declHasAnnotation(P, "language_require_rooted_slot")) {
+    if (declHasAnnotation(P, "julia_require_rooted_slot")) {
       auto Param = State->getLValue(P, LCtx);
       const MemRegion *Root = State->getSVal(Param).getAsRegion();
       State = State->set<GCRootMap>(Root, RootState::getRoot(-1));
@@ -751,7 +757,7 @@ void GCChecker::checkEndFunction(const clang::ReturnStmt *RS,
     Changed = true;
   }
   if (State->get<SafepointDisabledAt>() == CurrentHeight) {
-    if (!isFDAnnotatedNotSafepoint(FD, getSM(C)) && !(FD && declHasAnnotation(FD, "language_notsafepoint_enter"))) {
+    if (!isFDAnnotatedNotSafepoint(FD, getSM(C)) && !(FD && declHasAnnotation(FD, "julia_notsafepoint_enter"))) {
       report_error(C, "Safepoints disabled at end of function");
     }
     State = State->set<SafepointDisabledAt>((unsigned)-1);
@@ -776,7 +782,7 @@ const AnnotateAttr *GCChecker::declHasAnnotation(const clang::Decl *D, const cha
 }
 
 bool GCChecker::isFDAnnotatedNotSafepoint(const clang::FunctionDecl *FD, const SourceManager &SM) {
-  if (declHasAnnotation(FD, "language_not_safepoint"))
+  if (declHasAnnotation(FD, "julia_not_safepoint"))
       return true;
   SourceLocation Loc = FD->getLocation();
   StringRef Name = SM.getFilename(Loc);
@@ -813,50 +819,50 @@ static bool isMutexUnlock(StringRef name) {
 bool GCChecker::isGCTrackedType(QualType QT) {
   return isJuliaType(
              [](StringRef Name) {
-               if (Name.ends_with_insensitive("language_value_t") ||
-                   Name.ends_with_insensitive("language_svec_t") ||
-                   Name.ends_with_insensitive("language_sym_t") ||
-                   Name.ends_with_insensitive("language_expr_t") ||
-                   Name.ends_with_insensitive("language_code_info_t") ||
-                   Name.ends_with_insensitive("language_array_t") ||
-                   Name.ends_with_insensitive("language_genericmemory_t") ||
-                   //Name.ends_with_insensitive("language_genericmemoryref_t") ||
-                   Name.ends_with_insensitive("language_method_t") ||
-                   Name.ends_with_insensitive("language_method_instance_t") ||
-                   Name.ends_with_insensitive("language_debuginfo_t") ||
-                   Name.ends_with_insensitive("language_tupletype_t") ||
-                   Name.ends_with_insensitive("language_datatype_t") ||
-                   Name.ends_with_insensitive("language_typemap_entry_t") ||
-                   Name.ends_with_insensitive("language_typemap_level_t") ||
-                   Name.ends_with_insensitive("language_typename_t") ||
-                   Name.ends_with_insensitive("language_module_t") ||
-                   Name.ends_with_insensitive("language_tupletype_t") ||
-                   Name.ends_with_insensitive("language_gc_tracked_buffer_t") ||
-                   Name.ends_with_insensitive("language_binding_t") ||
-                   Name.ends_with_insensitive("language_ordereddict_t") ||
-                   Name.ends_with_insensitive("language_tvar_t") ||
-                   Name.ends_with_insensitive("language_typemap_t") ||
-                   Name.ends_with_insensitive("language_unionall_t") ||
-                   Name.ends_with_insensitive("language_methtable_t") ||
-                   Name.ends_with_insensitive("language_cgval_t") ||
-                   Name.ends_with_insensitive("language_codectx_t") ||
-                   Name.ends_with_insensitive("language_ast_context_t") ||
-                   Name.ends_with_insensitive("language_code_instance_t") ||
-                   Name.ends_with_insensitive("language_excstack_t") ||
-                   Name.ends_with_insensitive("language_task_t") ||
-                   Name.ends_with_insensitive("language_uniontype_t") ||
-                   Name.ends_with_insensitive("language_method_match_t") ||
-                   Name.ends_with_insensitive("language_vararg_t") ||
-                   Name.ends_with_insensitive("language_opaque_closure_t") ||
-                   Name.ends_with_insensitive("language_globalref_t") ||
+               if (Name.ends_with_insensitive("code_value_t") ||
+                   Name.ends_with_insensitive("code_svec_t") ||
+                   Name.ends_with_insensitive("code_sym_t") ||
+                   Name.ends_with_insensitive("code_expr_t") ||
+                   Name.ends_with_insensitive("code_code_info_t") ||
+                   Name.ends_with_insensitive("code_array_t") ||
+                   Name.ends_with_insensitive("code_genericmemory_t") ||
+                   //Name.ends_with_insensitive("code_genericmemoryref_t") ||
+                   Name.ends_with_insensitive("code_method_t") ||
+                   Name.ends_with_insensitive("code_method_instance_t") ||
+                   Name.ends_with_insensitive("code_debuginfo_t") ||
+                   Name.ends_with_insensitive("code_tupletype_t") ||
+                   Name.ends_with_insensitive("code_datatype_t") ||
+                   Name.ends_with_insensitive("code_typemap_entry_t") ||
+                   Name.ends_with_insensitive("code_typemap_level_t") ||
+                   Name.ends_with_insensitive("code_typename_t") ||
+                   Name.ends_with_insensitive("code_module_t") ||
+                   Name.ends_with_insensitive("code_tupletype_t") ||
+                   Name.ends_with_insensitive("code_gc_tracked_buffer_t") ||
+                   Name.ends_with_insensitive("code_binding_t") ||
+                   Name.ends_with_insensitive("code_ordereddict_t") ||
+                   Name.ends_with_insensitive("code_tvar_t") ||
+                   Name.ends_with_insensitive("code_typemap_t") ||
+                   Name.ends_with_insensitive("code_unionall_t") ||
+                   Name.ends_with_insensitive("code_methtable_t") ||
+                   Name.ends_with_insensitive("code_cgval_t") ||
+                   Name.ends_with_insensitive("code_codectx_t") ||
+                   Name.ends_with_insensitive("code_ast_context_t") ||
+                   Name.ends_with_insensitive("code_code_instance_t") ||
+                   Name.ends_with_insensitive("code_excstack_t") ||
+                   Name.ends_with_insensitive("code_task_t") ||
+                   Name.ends_with_insensitive("code_uniontype_t") ||
+                   Name.ends_with_insensitive("code_method_match_t") ||
+                   Name.ends_with_insensitive("code_vararg_t") ||
+                   Name.ends_with_insensitive("code_opaque_closure_t") ||
+                   Name.ends_with_insensitive("code_globalref_t") ||
                    // Probably not technically true for these, but let's allow it
                    Name.ends_with_insensitive("typemap_intersection_env") ||
                    Name.ends_with_insensitive("interpreter_state") ||
-                   Name.ends_with_insensitive("language_typeenv_t") ||
-                   Name.ends_with_insensitive("language_stenv_t") ||
-                   Name.ends_with_insensitive("language_varbinding_t") ||
+                   Name.ends_with_insensitive("code_typeenv_t") ||
+                   Name.ends_with_insensitive("code_stenv_t") ||
+                   Name.ends_with_insensitive("code_varbinding_t") ||
                    Name.ends_with_insensitive("set_world") ||
-                   Name.ends_with_insensitive("language_codectx_t")) {
+                   Name.ends_with_insensitive("code_codectx_t")) {
                  return true;
                }
                return false;
@@ -879,7 +885,7 @@ bool GCChecker::isGCTracked(const Expr *E) {
 
 bool GCChecker::isGloballyRootedType(QualType QT) const {
   return isJuliaType(
-      [](StringRef Name) { return Name.endswith("language_sym_t"); }, QT);
+      [](StringRef Name) { return Name.endswith("code_sym_t"); }, QT);
 }
 
 bool GCChecker::isSafepoint(const CallEvent &Call, CheckerContext &C) const {
@@ -911,7 +917,7 @@ bool GCChecker::isSafepoint(const CallEvent &Call, CheckerContext &C) const {
       } else if (const ElaboratedType *ET = dyn_cast<ElaboratedType>(Callee->getType())){
         if (const TypedefType *TDT = dyn_cast<TypedefType>(ET->getNamedType())) {
           isCalleeSafepoint =
-              !declHasAnnotation(TDT->getDecl(), "language_not_safepoint");
+              !declHasAnnotation(TDT->getDecl(), "julia_not_safepoint");
         }
       } else if (const CXXPseudoDestructorExpr *PDE =
                      dyn_cast<CXXPseudoDestructorExpr>(Callee)) {
@@ -951,7 +957,7 @@ bool GCChecker::processPotentialSafepoint(const CallEvent &Call,
   if (FD) {
     for (unsigned i = 0; i < FD->getNumParams(); ++i) {
       QualType ParmType = FD->getParamDecl(i)->getType();
-      if (declHasAnnotation(FD->getParamDecl(i), "language_temporarily_roots")) {
+      if (declHasAnnotation(FD->getParamDecl(i), "julia_temporarily_roots")) {
         if (ParmType->isPointerType() &&
             ParmType->getPointeeType()->isPointerType() &&
             isGCTrackedType(ParmType->getPointeeType())) {
@@ -1016,10 +1022,10 @@ bool GCChecker::processArgumentRooting(const CallEvent &Call, CheckerContext &C,
   const MemRegion *RootingRegion = nullptr;
   SymbolRef RootedSymbol = nullptr;
   for (unsigned i = 0; i < FD->getNumParams(); ++i) {
-    if (declHasAnnotation(FD->getParamDecl(i), "language_rooting_argument")) {
+    if (declHasAnnotation(FD->getParamDecl(i), "julia_rooting_argument")) {
       RootingRegion = Call.getArgSVal(i).getAsRegion();
     } else if (declHasAnnotation(FD->getParamDecl(i),
-                                 "language_rooted_argument")) {
+                                 "julia_rooted_argument")) {
       RootedSymbol = Call.getArgSVal(i).getAsSymbol();
     }
   }
@@ -1057,20 +1063,20 @@ bool GCChecker::processAllocationOfResult(const CallEvent &Call,
     auto *Decl = Call.getDecl();
     const FunctionDecl *FD = Decl ? Decl->getAsFunction() : nullptr;
     if (FD) {
-      if (declHasAnnotation(FD, "language_globally_rooted")) {
+      if (declHasAnnotation(FD, "julia_globally_rooted")) {
         NewVState = ValueState::getRooted(nullptr, -1);
       } else {
-        // Special case for language_box_ functions which have value-dependent
+        // Special case for code_box_ functions which have value-dependent
         // global roots.
         StringRef FDName =
             FD->getDeclName().isIdentifier() ? FD->getName() : "";
-        if (FDName.startswith("language_box_") || FDName.startswith("ilanguage_box_")) {
+        if (FDName.startswith("code_box_") || FDName.startswith("icode_box_")) {
           SVal Arg = Call.getArgSVal(0);
           if (auto CI = Arg.getAs<nonloc::ConcreteInt>()) {
             const llvm::APSInt &Value = CI->getValue();
             bool GloballyRooted = false;
             const int64_t NBOX_C = 1024;
-            if (FDName.startswith("language_box_u") || FDName.startswith("ilanguage_box_u")) {
+            if (FDName.startswith("code_box_u") || FDName.startswith("icode_box_u")) {
               if (Value < NBOX_C) {
                 GloballyRooted = true;
               }
@@ -1086,7 +1092,7 @@ bool GCChecker::processAllocationOfResult(const CallEvent &Call,
         } else {
           for (unsigned i = 0; i < FD->getNumParams(); ++i) {
             if (declHasAnnotation(FD->getParamDecl(i),
-                                  "language_propagates_root")) {
+                                  "julia_propagates_root")) {
               SVal Test = Call.getArgSVal(i);
               // Walk backwards to find the region that roots this value
               const MemRegion *Region = Test.getAsRegion();
@@ -1178,9 +1184,9 @@ void GCChecker::checkDerivingExpr(const Expr *Result, const Expr *Parent,
   }
   if (!isGCTracked(Result)) {
     // TODO: We may want to refine this. This is to track pointers through the
-    // array list in language_module_t.
+    // array list in code_module_t.
     bool ParentIsModule = isJuliaType(
-        [](StringRef Name) { return Name.endswith("language_module_t"); },
+        [](StringRef Name) { return Name.endswith("code_module_t"); },
         Parent->getType());
     bool ResultIsArrayList = isJuliaType(
         [](StringRef Name) { return Name.endswith("arraylist_t"); },
@@ -1339,7 +1345,7 @@ void GCChecker::checkPreCall(const CallEvent &Call, CheckerContext &C) const {
   const FunctionDecl *FD = Decl ? Decl->getAsFunction() : nullptr;
   StringRef FDName =
       FD && FD->getDeclName().isIdentifier() ? FD->getName() : "";
-  if (isMutexUnlock(FDName) || (FD && declHasAnnotation(FD, "language_notsafepoint_leave"))) {
+  if (isMutexUnlock(FDName) || (FD && declHasAnnotation(FD, "julia_notsafepoint_leave"))) {
     const auto *LCtx = C.getLocationContext();
     const auto *FD = dyn_cast<FunctionDecl>(LCtx->getDecl());
     if (State->get<SafepointDisabledAt>() == getStackFrameHeight(C.getStackFrame()) &&
@@ -1362,12 +1368,12 @@ void GCChecker::checkPreCall(const CallEvent &Call, CheckerContext &C) const {
             Report->addVisitor(make_unique<SafepointBugVisitor>());
           },
           C, ("Calling potential safepoint as " +
-              Call.getKindAsString() + " from function annotated LANGUAGE_NOTSAFEPOINT").str());
+              Call.getKindAsString() + " from function annotated CODE_NOTSAFEPOINT").str());
       return;
     }
   }
   if (FD && FD->getDeclName().isIdentifier() &&
-      FD->getName() == "LANGUAGE_GC_PROMISE_ROOTED")
+      FD->getName() == "CODE_GC_PROMISE_ROOTED")
     return;
   for (unsigned idx = 0; idx < NumArgs; ++idx) {
     SVal Arg = Call.getArgSVal(idx);
@@ -1404,7 +1410,7 @@ void GCChecker::checkPreCall(const CallEvent &Call, CheckerContext &C) const {
     if (FD) {
       if (idx < FD->getNumParams()) {
         MaybeUnrooted =
-            declHasAnnotation(FD->getParamDecl(idx), "language_maybe_unrooted");
+            declHasAnnotation(FD->getParamDecl(idx), "julia_maybe_unrooted");
       }
     }
     if (!MaybeUnrooted && isCalleeSafepoint) {
@@ -1424,9 +1430,9 @@ bool GCChecker::evalCall(const CallEvent &Call, CheckerContext &C) const {
     return false;
   unsigned CurrentDepth = C.getState()->get<GCDepth>();
   auto name = C.getCalleeName(CE);
-  if (name == "LANGUAGE_GC_POP") {
+  if (name == "CODE_GC_POP") {
     if (CurrentDepth == 0) {
-      report_error(C, "LANGUAGE_GC_POP without corresponding push");
+      report_error(C, "CODE_GC_POP without corresponding push");
       return true;
     }
     CurrentDepth -= 1;
@@ -1453,11 +1459,11 @@ bool GCChecker::evalCall(const CallEvent &Call, CheckerContext &C) const {
     }
     C.addTransition(State);
     return true;
-  } else if (name == "LANGUAGE_GC_PUSH1" || name == "LANGUAGE_GC_PUSH2" ||
-             name == "LANGUAGE_GC_PUSH3" || name == "LANGUAGE_GC_PUSH4" ||
-             name == "LANGUAGE_GC_PUSH5" || name == "LANGUAGE_GC_PUSH6" ||
-             name == "LANGUAGE_GC_PUSH7" || name == "LANGUAGE_GC_PUSH8" ||
-             name == "LANGUAGE_GC_PUSH9") {
+  } else if (name == "CODE_GC_PUSH1" || name == "CODE_GC_PUSH2" ||
+             name == "CODE_GC_PUSH3" || name == "CODE_GC_PUSH4" ||
+             name == "CODE_GC_PUSH5" || name == "CODE_GC_PUSH6" ||
+             name == "CODE_GC_PUSH7" || name == "CODE_GC_PUSH8" ||
+             name == "CODE_GC_PUSH9") {
     ProgramStateRef State = C.getState();
     // Transform slots to roots, transform values to rooted
     unsigned NumArgs = CE->getNumArgs();
@@ -1465,7 +1471,7 @@ bool GCChecker::evalCall(const CallEvent &Call, CheckerContext &C) const {
       SVal V = C.getSVal(CE->getArg(i));
       auto MRV = V.getAs<loc::MemRegionVal>();
       if (!MRV) {
-        report_error(C, "LANGUAGE_GC_PUSH with something other than a local variable");
+        report_error(C, "CODE_GC_PUSH with something other than a local variable");
         return true;
       }
       const MemRegion *Region = MRV->getRegion();
@@ -1490,12 +1496,12 @@ bool GCChecker::evalCall(const CallEvent &Call, CheckerContext &C) const {
     State = State->set<GCDepth>(CurrentDepth);
     C.addTransition(State);
     return true;
-  } else if (name == "_LANGUAGE_GC_PUSHARGS") {
+  } else if (name == "_CODE_GC_PUSHARGS") {
     ProgramStateRef State = C.getState();
     SVal ArgArray = C.getSVal(CE->getArg(0));
     auto MRV = ArgArray.getAs<loc::MemRegionVal>();
     if (!MRV) {
-      report_error(C, "LANGUAGE_GC_PUSH with something other than an args array");
+      report_error(C, "CODE_GC_PUSH with something other than an args array");
       return true;
     }
     const MemRegion *Region = MRV->getRegion()->StripCasts();
@@ -1510,7 +1516,7 @@ bool GCChecker::evalCall(const CallEvent &Call, CheckerContext &C) const {
     State = State->set<GCDepth>(CurrentDepth);
     C.addTransition(State);
     return true;
-  } else if (name == "LANGUAGE_GC_PROMISE_ROOTED") {
+  } else if (name == "CODE_GC_PROMISE_ROOTED") {
     SVal Arg = C.getSVal(CE->getArg(0));
     SymbolRef Sym = Arg.getAsSymbol();
     if (!Sym) {
@@ -1520,7 +1526,7 @@ bool GCChecker::evalCall(const CallEvent &Call, CheckerContext &C) const {
     C.addTransition(
         C.getState()->set<GCValueMap>(Sym, ValueState::getRooted(nullptr, -1)));
     return true;
-  } else if (name == "language_gc_push_arraylist") {
+  } else if (name == "code_gc_push_arraylist") {
     CurrentDepth += 1;
     ProgramStateRef State = C.getState()->set<GCDepth>(CurrentDepth);
     SVal ArrayList = C.getSVal(CE->getArg(1));
@@ -1551,7 +1557,7 @@ bool GCChecker::evalCall(const CallEvent &Call, CheckerContext &C) const {
     }
     C.addTransition(State);
     return true;
-  } else if (name == "language_ast_preserve") {
+  } else if (name == "code_ast_preserve") {
     // TODO: Maybe bind the rooting to the context. For now, the second
     //       argument gets unconditionally rooted
     ProgramStateRef State = C.getState();
@@ -1561,7 +1567,7 @@ bool GCChecker::evalCall(const CallEvent &Call, CheckerContext &C) const {
     C.addTransition(
         State->set<GCValueMap>(Sym, ValueState::getRooted(nullptr, -1)));
     return true;
-  } else if (name == "language_gc_enable" || name == "ilanguage_gc_enable") {
+  } else if (name == "code_gc_enable" || name == "icode_gc_enable") {
     ProgramStateRef State = C.getState();
     // Check for a literal argument
     SVal Arg = C.getSVal(CE->getArg(0));
@@ -1588,7 +1594,7 @@ bool GCChecker::evalCall(const CallEvent &Call, CheckerContext &C) const {
   {
       auto *Decl = Call.getDecl();
       const FunctionDecl *FD = Decl ? Decl->getAsFunction() : nullptr;
-      if (isMutexLock(name) || (FD && declHasAnnotation(FD, "language_notsafepoint_enter"))) {
+      if (isMutexLock(name) || (FD && declHasAnnotation(FD, "julia_notsafepoint_enter"))) {
         ProgramStateRef State = C.getState();
         if (State->get<SafepointDisabledAt>() == (unsigned)-1) {
           C.addTransition(State->set<SafepointDisabledAt>(getStackFrameHeight(C.getStackFrame())));
@@ -1677,7 +1683,7 @@ bool GCChecker::rootRegionIfGlobal(const MemRegion *R, ProgramStateRef &State,
   if (!isGCTrackedType(VD->getType()))
     return false;
   bool isGlobalRoot = false;
-  if (declHasAnnotation(VD, "language_globally_rooted") ||
+  if (declHasAnnotation(VD, "julia_globally_rooted") ||
       isGloballyRootedType(VD->getType())) {
     State = State->set<GCRootMap>(R, RootState::getRoot(-1));
     isGlobalRoot = true;
@@ -1759,7 +1765,7 @@ extern "C" const char clang_analyzerAPIVersionString[] =
     CLANG_ANALYZER_API_VERSION_STRING;
 extern "C" void clang_registerCheckers(CheckerRegistry &registry) {
   registry.addChecker<GCChecker>(
-      "julia.GCChecker", "Validates julia gc invariants",
+      "code.GCChecker", "Validates julia gc invariants",
       "https://docs.julialang.org/en/v1/devdocs/gc-sa/"
   );
 }
