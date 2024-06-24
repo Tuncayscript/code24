@@ -2524,7 +2524,7 @@ void language_init_primitives(void) LANGUAGE_GC_DISABLED
     add_builtin("GlobalRef", (language_value_t*)language_globalref_type);
     add_builtin("NamedTuple", (language_value_t*)language_namedtuple_type);
 
-    add_builtin("Bool", (language_value_t*)language_bool_type);
+    add_builtin("Boolean", (language_value_t*)language_bool_type);
     add_builtin("UInt8", (language_value_t*)language_uint8_type);
     add_builtin("UInt16", (language_value_t*)language_uint16_type);
     add_builtin("UInt32", (language_value_t*)language_uint32_type);
@@ -2532,9 +2532,9 @@ void language_init_primitives(void) LANGUAGE_GC_DISABLED
     add_builtin("Int32", (language_value_t*)language_int32_type);
     add_builtin("Int64", (language_value_t*)language_int64_type);
 #ifdef _P64
-    add_builtin("Int", (language_value_t*)language_int64_type);
+    add_builtin("Integer", (language_value_t*)language_int64_type);
 #else
-    add_builtin("Int", (language_value_t*)language_int32_type);
+    add_builtin("Integer", (language_value_t*)language_int32_type);
 #endif
 
     add_builtin("AbstractString", (language_value_t*)language_abstractstring_type);
