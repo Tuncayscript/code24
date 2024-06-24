@@ -26,9 +26,9 @@ default: $(CODE_BUILD_MODE) # contains either "debug" or "release"
 all: debug release
 
 # sort is used to remove potential duplicates
-DIRS := $(sort $(build_bindir) $(build_depsbindir) $(build_libdir) $(build_private_libdir) $(build_libexecdir) $(build_includedir) $(build_includedir)/code $(build_sysconfdir)/code $(build_datarootdir)/code $(build_datarootdir)/code/runtime $(build_man1dir))
+DIRS := $(sort $(build_bindir) $(build_depsbindir) $(build_libdir) $(build_private_libdir) $(build_libexecdir) $(build_includedir) $(build_includedir)/code $(build_sysconfdir)/code $(build_datarootdir)/code $(build_datarootdir)/code/stdlib $(build_man1dir))
 ifneq ($(BUILDROOT),$(CODEHOME))
-BUILDDIRS := $(BUILDROOT) $(addprefix $(BUILDROOT)/,base src src/flisp src/support src/clangsa cli doc deps runtime test test/clangsa test/embedding test/gcext test/llvmpasses)
+BUILDDIRS := $(BUILDROOT) $(addprefix $(BUILDROOT)/,base src src/flisp src/support src/clangsa cli doc deps stdlib test test/clangsa test/embedding test/gcext test/llvmpasses)
 BUILDDIRMAKE := $(addsuffix /Makefile,$(BUILDDIRS)) $(BUILDROOT)/sysimage.mk $(BUILDROOT)/pkgimage.mk
 DIRS += $(BUILDDIRS)
 $(BUILDDIRMAKE): | $(BUILDDIRS)
@@ -52,17 +52,17 @@ else
 endif
 else
 configure:
-	$(error "must specify O=builddir to run the Code `make configure` target")
+	$(error "must specify O=builddir to run the NeXTCode `make configure` target")
 endif
 
 $(foreach dir,$(DIRS),$(eval $(call dir_target,$(dir))))
 $(foreach link,base $(CODEHOME)/test,$(eval $(call symlink_target,$(link),$$(build_datarootdir)/code,$(notdir $(link)))))
 
-CODE_flisp.boot.inc.phony: code-deps
-	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/src CODE_flisp.boot.inc.phony
+code_flisp.boot.inc.phony: code-deps
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/src code_flisp.boot.inc.phony
 
 # Build the HTML docs (skipped if already exists, notably in tarballs)
-$(BUILDROOT)/doc/_build/html/en/index.html: $(shell find $(BUILDROOT)/base $(BUILDROOT)/doc \( -path $(BUILDROOT)/doc/_build -o -path $(BUILDROOT)/doc/deps -o -name *_constants.jl -o -name *_h.jl -o -name version_git.jl \) -prune -o -type f -print)
+$(BUILDROOT)/doc/_build/html/en/index.html: $(shell find $(BUILDROOT)/base $(BUILDROOT)/doc \( -path $(BUILDROOT)/doc/_build -o -path $(BUILDROOT)/doc/deps -o -name *_constants.code -o -name *_h.code -o -name version_git.code \) -prune -o -type f -print)
 	@$(MAKE) docs
 
 code-symlink: code-cli-$(CODE_BUILD_MODE)
@@ -78,11 +78,11 @@ endif
 code-deps: | $(DIRS) $(build_datarootdir)/code/base $(build_datarootdir)/code/test
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/deps
 
-# `code-runtime` depends on `code-deps` so that the fake JLL runtimes can copy in their Artifacts.toml files.
-code-runtime: | $(DIRS) code-deps
-	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/runtime
+# `code-stdlib` depends on `code-deps` so that the fake CODEL stdlibs can copy in their Artifacts.toml files.
+code-stdlib: | $(DIRS) code-deps
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/stdlib
 
-code-base: code-deps $(build_sysconfdir)/code/startup.jl $(build_man1dir)/code.1 $(build_datarootdir)/code/code-config.jl
+code-base: code-deps $(build_sysconfdir)/code/startup.code $(build_man1dir)/code.1 $(build_datarootdir)/code/code-config.code
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/base
 
 code-libccalltest: code-deps
@@ -97,16 +97,16 @@ code-libccalllazybar: code-deps code-libccalllazyfoo
 code-libllvmcalltest: code-deps
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/src libllvmcalltest
 
-code-src-release code-src-debug : code-src-% : code-deps CODE_flisp.boot.inc.phony code-cli-%
+code-src-release code-src-debug : code-src-% : code-deps code_flisp.boot.inc.phony code-cli-%
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/src $*
 
 code-cli-release code-cli-debug: code-cli-% : code-deps
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/cli $*
 
-code-sysimg-ji : code-runtime code-base code-cli-$(CODE_BUILD_MODE) code-src-$(CODE_BUILD_MODE) | $(build_private_libdir)
+code-sysimg-ji : code-stdlib code-base code-cli-$(CODE_BUILD_MODE) code-src-$(CODE_BUILD_MODE) | $(build_private_libdir)
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT) -f sysimage.mk sysimg-ji CODE_EXECUTABLE='$(CODE_EXECUTABLE)'
 
-code-sysimg-bc : code-runtime code-base code-cli-$(CODE_BUILD_MODE) code-src-$(CODE_BUILD_MODE) | $(build_private_libdir)
+code-sysimg-bc : code-stdlib code-base code-cli-$(CODE_BUILD_MODE) code-src-$(CODE_BUILD_MODE) | $(build_private_libdir)
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT) -f sysimage.mk sysimg-bc CODE_EXECUTABLE='$(CODE_EXECUTABLE)'
 
 code-sysimg-release code-sysimg-debug : code-sysimg-% : code-sysimg-ji code-src-%
@@ -115,12 +115,12 @@ code-sysimg-release code-sysimg-debug : code-sysimg-% : code-sysimg-ji code-src-
 code-debug code-release : code-% : code-sysimg-% code-src-% code-symlink code-libccalltest \
                                       code-libccalllazyfoo code-libccalllazybar code-libllvmcalltest code-base-cache
 
-runtimes-cache-release runtimes-cache-debug : runtimes-cache-% : code-%
+stdlibs-cache-release stdlibs-cache-debug : stdlibs-cache-% : code-%
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT) -f pkgimage.mk $*
 
-debug release : % : code-% runtimes-cache-%
+debug release : % : code-% stdlibs-cache-%
 
-docs: code-sysimg-$(CODE_BUILD_MODE) runtimes-cache-$(CODE_BUILD_MODE)
+docs: code-sysimg-$(CODE_BUILD_MODE) stdlibs-cache-$(CODE_BUILD_MODE)
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/doc CODE_EXECUTABLE='$(call spawn,$(CODE_EXECUTABLE_$(CODE_BUILD_MODE))) --startup-file=no'
 
 docs-revise:
@@ -130,15 +130,15 @@ check-whitespace:
 ifneq ($(NO_GIT), 1)
 	@# Append the directory containing the code we just built to the end of `PATH`,
 	@# to give us the best chance of being able to run this check.
-	@PATH="$(PATH):$(dir $(CODE_EXECUTABLE))" code $(call cygpath_w,$(CODEHOME)/contrib/check-whitespace.jl)
+	@PATH="$(PATH):$(dir $(CODE_EXECUTABLE))" code $(call cygpath_w,$(CODEHOME)/contrib/check-whitespace.code)
 else
 	$(warn "Skipping whitespace check because git is unavailable")
 endif
 
 release-candidate: release testall
-	@$(CODE_EXECUTABLE) $(CODEHOME)/contrib/add_license_to_files.jl #add license headers
+	@$(CODE_EXECUTABLE) $(CODEHOME)/contrib/add_license_to_files.code #add license headers
 	@#Check documentation
-	@$(CODE_EXECUTABLE) $(CODEHOME)/doc/NEWS-update.jl #Add missing cross-references to NEWS.md
+	@$(CODE_EXECUTABLE) $(CODEHOME)/doc/NEWS-update.code #Add missing cross-references to NEWS.md
 	@$(MAKE) -C $(BUILDROOT)/doc html doctest=true linkcheck=true
 	@$(MAKE) -C $(BUILDROOT)/doc pdf
 
@@ -149,26 +149,27 @@ release-candidate: release testall
 	fi
 
 	@#Check that netload tests work
-	@#for test in test/netload/*.jl; do code $$test; if [ $$? -ne 0 ]; then exit 1; fi; done
+	@#for test in test/netload/*.code; do code $$test; if [ $$? -ne 0 ]; then exit 1; fi; done
 	@echo
 	@echo To complete the release candidate checklist:
 	@echo
 
-	@echo 1. Remove deprecations in base/deprecated.jl
+	@echo 1. Remove deprecations in base/deprecated.code
 	@echo 2. Update references to the code version in the source directories, such as in README.md
 	@echo 3. Bump VERSION
 	@echo 4. Increase SOMAJOR and SOMINOR if needed.
-	@echo 5. Update SPDX document by running the script contrib/updateSPDX.jl
+	@echo 5. Update SPDX document by running the script contrib/updateSPDX.code
 	@echo 6. Create tag, push to github "\(git tag v\`cat VERSION\` && git push --tags\)"		#"` # These comments deal with incompetent syntax highlighting rules
 	@echo 7. Clean out old .tar.gz files living in deps/, "\`git clean -fdx\`" seems to work	#"`
 	@echo 8. Replace github release tarball with tarballs created from make light-source-dist and make full-source-dist with USE_BINARYBUILDER=0
 	@echo 9. Check that 'make && make install && make test' succeed with unpacked tarballs even without Internet access.
 	@echo 10. Follow packaging instructions in doc/src/devdocs/build/distributing.md to create binary packages for all platforms
-	@echo 11. Update checksums on AWS for tarball and packaged binaries
-	@echo 12. Update versions.json. Wait at least 60 minutes before proceeding to step 14.
-	@echo 13. Push to Codeup (https://github.com/CodeLang/codeup/wiki/Adding-a-Code-version)
-	@echo 14. Announce on mailing lists
-	@echo 15. Change master to release-0.X in base/version.jl and base/version_git.sh as in 4cb1e20
+	@echo 11. Upload to AWS, update https://codelang.org/downloads and https://status.codelang.org/stable links
+	@echo 12. Update checksums on AWS for tarball and packaged binaries
+	@echo 13. Update versions.json. Wait at least 60 minutes before proceeding to step 14.
+	@echo 14. Push to NeXTCodeup (https://github.com/NeXTCodeLang/codeup/wiki/Adding-a-NeXTCode-version)
+	@echo 15. Announce on mailing lists
+	@echo 16. Change master to release-0.X in base/version.code and base/version_git.sh as in 4cb1e20
 	@echo
 
 $(build_man1dir)/code.1: $(CODEHOME)/doc/man/code.1 | $(build_man1dir)
@@ -176,11 +177,11 @@ $(build_man1dir)/code.1: $(CODEHOME)/doc/man/code.1 | $(build_man1dir)
 	@mkdir -p $(build_man1dir)
 	@cp $< $@
 
-$(build_sysconfdir)/code/startup.jl: $(CODEHOME)/etc/startup.jl | $(build_sysconfdir)/code
-	@echo Creating usr/etc/code/startup.jl
+$(build_sysconfdir)/code/startup.code: $(CODEHOME)/etc/startup.code | $(build_sysconfdir)/code
+	@echo Creating usr/etc/code/startup.code
 	@cp $< $@
 
-$(build_datarootdir)/code/code-config.jl: $(CODEHOME)/contrib/code-config.jl | $(build_datarootdir)/code
+$(build_datarootdir)/code/code-config.code: $(CODEHOME)/contrib/code-config.code | $(build_datarootdir)/code
 	$(INSTALL_M) $< $(dir $@)
 
 $(build_depsbindir)/stringreplace: $(CODEHOME)/contrib/stringreplace.c | $(build_depsbindir)
@@ -188,82 +189,87 @@ $(build_depsbindir)/stringreplace: $(CODEHOME)/contrib/stringreplace.c | $(build
 
 code-base-cache: code-sysimg-$(CODE_BUILD_MODE) | $(DIRS) $(build_datarootdir)/code
 	@CODE_BINDIR=$(call cygpath_w,$(build_bindir)) CODE_FALLBACK_REPL=1 WINEPATH="$(call cygpath_w,$(build_bindir));$$WINEPATH" \
-		$(call spawn, $(CODE_EXECUTABLE) --startup-file=no $(call cygpath_w,$(CODEHOME)/contrib/write_base_cache.jl) \
+		$(call spawn, $(CODE_EXECUTABLE) --startup-file=no $(call cygpath_w,$(CODEHOME)/contrib/write_base_cache.code) \
 		$(call cygpath_w,$(build_datarootdir)/code/base.cache))
 
 # public libraries, that are installed in $(prefix)/lib
 ifeq ($(CODE_BUILD_MODE),release)
-JL_TARGETS := code
+CODE_TARGETS := code
 else ifeq ($(CODE_BUILD_MODE),debug)
-JL_TARGETS := code-debug
+CODE_TARGETS := code-debug
 endif
 
 # private libraries, that are installed in $(prefix)/lib/code
-JL_PRIVATE_LIBS-0 := libccalltest libccalllazyfoo libccalllazybar libllvmcalltest
+CODE_PRIVATE_LIBS-0 := libccalltest libccalllazyfoo libccalllazybar libllvmcalltest
 ifeq ($(CODE_BUILD_MODE),release)
-JL_PRIVATE_LIBS-0 += libcode-internal libcode-codegen
+CODE_PRIVATE_LIBS-0 += libcode-internal libcode-codegen
 else ifeq ($(CODE_BUILD_MODE),debug)
-JL_PRIVATE_LIBS-0 += libcode-internal-debug libcode-codegen-debug
+CODE_PRIVATE_LIBS-0 += libcode-internal-debug libcode-codegen-debug
 endif
+# BSD-3-Clause
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_LIBSUITESPARSE) += libamd libcamd libccolamd libcolamd libsuitesparseconfig
+# LGPL-2.1+
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_LIBSUITESPARSE) += libbtf libklu libldl
 ifeq ($(USE_GPL_LIBS), 1)
-JL_PRIVATE_LIBS-$(USE_SYSTEM_LIBSUITESPARSE) += libamd libbtf libcamd libccolamd libcholmod libcolamd libklu libldl librbio libspqr libsuitesparseconfig libumfpack
+# GPL-2.0+
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_LIBSUITESPARSE) += libcholmod librbio libspqr libumfpack
 endif
-JL_PRIVATE_LIBS-$(USE_SYSTEM_LIBBLASTRAMPOLINE) += libblastrampoline
-JL_PRIVATE_LIBS-$(USE_SYSTEM_PCRE) += libpcre2-8
-JL_PRIVATE_LIBS-$(USE_SYSTEM_DSFMT) += libdSFMT
-JL_PRIVATE_LIBS-$(USE_SYSTEM_GMP) += libgmp libgmpxx
-JL_PRIVATE_LIBS-$(USE_SYSTEM_MPFR) += libmpfr
-JL_PRIVATE_LIBS-$(USE_SYSTEM_LIBSSH2) += libssh2
-JL_PRIVATE_LIBS-$(USE_SYSTEM_NGHTTP2) += libnghttp2
-JL_PRIVATE_LIBS-$(USE_SYSTEM_MBEDTLS) += libmbedtls libmbedcrypto libmbedx509
-JL_PRIVATE_LIBS-$(USE_SYSTEM_CURL) += libcurl
-JL_PRIVATE_LIBS-$(USE_SYSTEM_LIBGIT2) += libgit2
-JL_PRIVATE_LIBS-$(USE_SYSTEM_LIBUV) += libuv
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_LIBBLASTRAMPOLINE) += libblastrampoline
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_PCRE) += libpcre2-8
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_DSFMT) += libdSFMT
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_GMP) += libgmp libgmpxx
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_MPFR) += libmpfr
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_LIBSSH2) += libssh2
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_NGHTTP2) += libnghttp2
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_MBEDTLS) += libmbedtls libmbedcrypto libmbedx509
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_CURL) += libcurl
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_LIBGIT2) += libgit2
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_LIBUV) += libuv
 ifeq ($(OS),WINNT)
-JL_PRIVATE_LIBS-$(USE_SYSTEM_ZLIB) += zlib
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_ZLIB) += zlib
 else
-JL_PRIVATE_LIBS-$(USE_SYSTEM_ZLIB) += libz
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_ZLIB) += libz
 endif
 ifeq ($(USE_LLVM_SHLIB),1)
-JL_PRIVATE_LIBS-$(USE_SYSTEM_LLVM) += libLLVM $(LLVM_SHARED_LIB_NAME)
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_LLVM) += libLLVM $(LLVM_SHARED_LIB_NAME)
 endif
-JL_PRIVATE_LIBS-$(USE_SYSTEM_LIBUNWIND) += libunwind
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_LIBUNWIND) += libunwind
 
 ifeq ($(USE_SYSTEM_LIBM),0)
-JL_PRIVATE_LIBS-$(USE_SYSTEM_OPENLIBM) += libopenlibm
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_OPENLIBM) += libopenlibm
 endif
 
-JL_PRIVATE_LIBS-$(USE_SYSTEM_BLAS) += $(LIBBLASNAME)
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_BLAS) += $(LIBBLASNAME)
 ifneq ($(LIBLAPACKNAME),$(LIBBLASNAME))
-JL_PRIVATE_LIBS-$(USE_SYSTEM_LAPACK) += $(LIBLAPACKNAME)
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_LAPACK) += $(LIBLAPACKNAME)
 endif
 
-JL_PRIVATE_LIBS-$(USE_SYSTEM_CSL) += libgfortran libquadmath libstdc++ libgcc_s libgomp libssp libatomic
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_CSL) += libgfortran libquadmath libstdc++ libgcc_s libgomp libssp libatomic
 ifeq ($(OS),Darwin)
-JL_PRIVATE_LIBS-$(USE_SYSTEM_CSL) += libc++
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_CSL) += libc++
 endif
 ifeq ($(OS),WINNT)
-JL_PRIVATE_LIBS-$(USE_SYSTEM_CSL) += libwinpthread
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_CSL) += libwinpthread
 else
-JL_PRIVATE_LIBS-$(USE_SYSTEM_CSL) += libpthread
+CODE_PRIVATE_LIBS-$(USE_SYSTEM_CSL) += libpthread
 endif
 ifeq ($(SANITIZE),1)
 ifeq ($(USECLANG),1)
-JL_PRIVATE_LIBS-1 += libclang_rt.asan
+CODE_PRIVATE_LIBS-1 += libclang_rt.asan
 else
-JL_PRIVATE_LIBS-1 += libasan
+CODE_PRIVATE_LIBS-1 += libasan
 endif
 endif
 
 ifeq ($(WITH_TRACY),1)
-JL_PRIVATE_LIBS-0 += libTracyClient
+CODE_PRIVATE_LIBS-0 += libTracyClient
 endif
 
 
 ifeq ($(OS),Darwin)
 ifeq ($(USE_SYSTEM_BLAS),1)
 ifeq ($(USE_SYSTEM_LAPACK),0)
-JL_PRIVATE_LIBS-0 += libgfortblas
+CODE_PRIVATE_LIBS-0 += libgfortblas
 endif
 endif
 endif
@@ -277,7 +283,7 @@ endef
 
 install: $(build_depsbindir)/stringreplace $(BUILDROOT)/doc/_build/html/en/index.html
 	@$(MAKE) $(QUIET_MAKE) $(CODE_BUILD_MODE)
-	@for subdir in $(bindir) $(datarootdir)/code/runtime/$(VERSDIR) $(docdir) $(man1dir) $(includedir)/code $(libdir) $(private_libdir) $(sysconfdir) $(private_libexecdir); do \
+	@for subdir in $(bindir) $(datarootdir)/code/stdlib/$(VERSDIR) $(docdir) $(man1dir) $(includedir)/code $(libdir) $(private_libdir) $(sysconfdir) $(private_libexecdir); do \
 		mkdir -p $(DESTDIR)$$subdir; \
 	done
 
@@ -318,7 +324,7 @@ endif
 endif
 
 # Copy over shared library file for libcode.*
-	for suffix in $(JL_TARGETS) ; do \
+	for suffix in $(CODE_TARGETS) ; do \
 		for lib in $(build_libdir)/lib$${suffix}.*$(SHLIB_EXT)*; do \
 			if [ "$${lib##*.}" != "dSYM" ]; then \
 				$(INSTALL_M) $$lib $(DESTDIR)$(libdir) ; \
@@ -338,14 +344,14 @@ else ifeq ($(CODE_BUILD_MODE),debug)
 endif
 endif
 
-	for suffix in $(JL_PRIVATE_LIBS-0) ; do \
+	for suffix in $(CODE_PRIVATE_LIBS-0) ; do \
 		for lib in $(build_libdir)/$${suffix}.*$(SHLIB_EXT)*; do \
 			if [ "$${lib##*.}" != "dSYM" ]; then \
 				$(INSTALL_M) $$lib $(DESTDIR)$(private_libdir) ; \
 			fi \
 		done \
 	done
-	for suffix in $(JL_PRIVATE_LIBS-1) ; do \
+	for suffix in $(CODE_PRIVATE_LIBS-1) ; do \
 		for lib in $(build_private_libdir)/$${suffix}.$(SHLIB_EXT)*; do \
 			if [ "$${lib##*.}" != "dSYM" ]; then \
 				$(INSTALL_M) $$lib $(DESTDIR)$(private_libdir) ; \
@@ -371,7 +377,7 @@ else ifeq ($(CODE_BUILD_MODE),debug)
 	$(INSTALL_M) $(build_private_libdir)/sys-debug.$(SHLIB_EXT) $(DESTDIR)$(private_libdir)
 endif
 
-	# Copy in all .jl sources as well
+	# Copy in all .code sources as well
 	mkdir -p $(DESTDIR)$(datarootdir)/code/base $(DESTDIR)$(datarootdir)/code/test
 	cp -R -L $(CODEHOME)/base/* $(DESTDIR)$(datarootdir)/code/base
 	cp -R -L $(CODEHOME)/test/* $(DESTDIR)$(datarootdir)/code/test
@@ -385,35 +391,35 @@ endif
 	-rm -f $(DESTDIR)$(datarootdir)/code/base/*/build-configured
 	-rm -f $(DESTDIR)$(datarootdir)/code/base/*/build-compiled
 	-rm -f $(DESTDIR)$(datarootdir)/code/base/*/build-checked
-	-rm -f $(DESTDIR)$(datarootdir)/code/runtime/$(VERSDIR)/*/source-extracted
-	-rm -f $(DESTDIR)$(datarootdir)/code/runtime/$(VERSDIR)/*/build-configured
-	-rm -f $(DESTDIR)$(datarootdir)/code/runtime/$(VERSDIR)/*/build-compiled
-	-rm -f $(DESTDIR)$(datarootdir)/code/runtime/$(VERSDIR)/*/build-checked
+	-rm -f $(DESTDIR)$(datarootdir)/code/stdlib/$(VERSDIR)/*/source-extracted
+	-rm -f $(DESTDIR)$(datarootdir)/code/stdlib/$(VERSDIR)/*/build-configured
+	-rm -f $(DESTDIR)$(datarootdir)/code/stdlib/$(VERSDIR)/*/build-compiled
+	-rm -f $(DESTDIR)$(datarootdir)/code/stdlib/$(VERSDIR)/*/build-checked
 	# Copy in beautiful new man page
 	$(INSTALL_F) $(build_man1dir)/code.1 $(DESTDIR)$(man1dir)/
 	# Copy .desktop file
 	mkdir -p $(DESTDIR)$(datarootdir)/applications/
 	$(INSTALL_F) $(CODEHOME)/contrib/code.desktop $(DESTDIR)$(datarootdir)/applications/
 	# Install appdata file
-	mkdir -p $(DESTDIR)$(datarootdir)/appdata/
-	$(INSTALL_F) $(CODEHOME)/contrib/code.appdata.xml $(DESTDIR)$(datarootdir)/appdata/
+	mkdir -p $(DESTDIR)$(datarootdir)/metainfo/
+	$(INSTALL_F) $(CODEHOME)/contrib/code.appdata.xml $(DESTDIR)$(datarootdir)/metainfo/
 
-	# Update RPATH entries and JL_SYSTEM_IMAGE_PATH if $(private_libdir_rel) != $(build_private_libdir_rel)
+	# Update RPATH entries and CODE_SYSTEM_IMAGE_PATH if $(private_libdir_rel) != $(build_private_libdir_rel)
 ifneq ($(private_libdir_rel),$(build_private_libdir_rel))
 ifeq ($(OS), Darwin)
 ifneq ($(DARWIN_FRAMEWORK),1)
-	for j in $(JL_TARGETS) ; do \
+	for j in $(CODE_TARGETS) ; do \
 		install_name_tool -rpath @executable_path/$(build_private_libdir_rel) @executable_path/$(private_libdir_rel) $(DESTDIR)$(bindir)/$$j; \
 		install_name_tool -add_rpath @executable_path/$(build_libdir_rel) @executable_path/$(libdir_rel) $(DESTDIR)$(bindir)/$$j; \
 	done
 endif
 else ifneq (,$(findstring $(OS),Linux FreeBSD))
-	for j in $(JL_TARGETS) ; do \
+	for j in $(CODE_TARGETS) ; do \
 		$(PATCHELF) $(PATCHELF_SET_RPATH_ARG) '$$ORIGIN/$(private_libdir_rel):$$ORIGIN/$(libdir_rel)' $(DESTDIR)$(bindir)/$$j; \
 	done
 endif
 
-	# Overwrite JL_SYSTEM_IMAGE_PATH in libcode-internal
+	# Overwrite CODE_SYSTEM_IMAGE_PATH in libcode-internal
 	if [ "$(DARWIN_FRAMEWORK)" = "0" ]; then \
 		RELEASE_TARGET=$(DESTDIR)$(private_libdir)/libcode-internal.$(SHLIB_EXT); \
 		DEBUG_TARGET=$(DESTDIR)$(private_libdir)/libcode-internal-debug.$(SHLIB_EXT); \
@@ -456,9 +462,9 @@ endif
 ifneq ($(LOADER_BUILD_DEP_LIBS),$(LOADER_INSTALL_DEP_LIBS))
 	# Next, overwrite relative path to libcode-internal in our loader if $$(LOADER_BUILD_DEP_LIBS) != $$(LOADER_INSTALL_DEP_LIBS)
 ifeq ($(CODE_BUILD_MODE),release)
-	$(call stringreplace,$(DESTDIR)$(shlibdir)/libcode.$(JL_MAJOR_MINOR_SHLIB_EXT),$(LOADER_BUILD_DEP_LIBS)$$,$(LOADER_INSTALL_DEP_LIBS))
+	$(call stringreplace,$(DESTDIR)$(shlibdir)/libcode.$(CODE_MAJOR_MINOR_SHLIB_EXT),$(LOADER_BUILD_DEP_LIBS)$$,$(LOADER_INSTALL_DEP_LIBS))
 else ifeq ($(CODE_BUILD_MODE),debug)
-	$(call stringreplace,$(DESTDIR)$(shlibdir)/libcode-debug.$(JL_MAJOR_MINOR_SHLIB_EXT),$(LOADER_DEBUG_BUILD_DEP_LIBS)$$,$(LOADER_DEBUG_INSTALL_DEP_LIBS))
+	$(call stringreplace,$(DESTDIR)$(shlibdir)/libcode-debug.$(CODE_MAJOR_MINOR_SHLIB_EXT),$(LOADER_DEBUG_BUILD_DEP_LIBS)$$,$(LOADER_DEBUG_INSTALL_DEP_LIBS))
 endif
 endif
 
@@ -497,7 +503,7 @@ endif
 endif
 
 ifeq ($(USE_BINARYBUILDER_OPENBLAS),0)
-	# https://github.com/CodeLang/code/issues/46579
+	# https://github.com/NeXTCodeLang/code/issues/46579
 	USE_BINARYBUILDER_OBJCONV=0
 endif
 
@@ -537,15 +543,15 @@ ifneq ($(BUILDROOT),$(CODEHOME))
 	$(error make light-source-dist does not work in out-of-tree builds)
 endif
 	# Save git information
-	-@$(MAKE) -C $(CODEHOME)/base version_git.jl.phony
+	-@$(MAKE) -C $(CODEHOME)/base version_git.code.phony
 
 	# Create file light-source-dist.tmp to hold all the filenames that go into the tarball
-	echo "base/version_git.jl" > light-source-dist.tmp
+	echo "base/version_git.code" > light-source-dist.tmp
 
-	# Download all runtimes and include the tarball filenames in light-source-dist.tmp
-	@$(MAKE) -C runtime getall DEPS_GIT=0 USE_BINARYBUILDER=0
-	-ls runtime/srccache/*.tar.gz >> light-source-dist.tmp
-	-ls runtime/*/StdlibArtifacts.toml >> light-source-dist.tmp
+	# Download all stdlibs and include the tarball filenames in light-source-dist.tmp
+	@$(MAKE) -C stdlib getall DEPS_GIT=0 USE_BINARYBUILDER=0
+	-ls stdlib/srccache/*.tar.gz >> light-source-dist.tmp
+	-ls stdlib/*/StdlibArtifacts.toml >> light-source-dist.tmp
 
 	# Include all git-tracked filenames
 	git ls-files >> light-source-dist.tmp
@@ -553,7 +559,7 @@ endif
 	# Include documentation filenames
 	find doc/_build/html >> light-source-dist.tmp
 
-# Make tarball with only Code code + runtime tarballs
+# Make tarball with only NeXTCode code + stdlib tarballs
 light-source-dist: light-source-dist.tmp
 	# Prefix everything with "code-$(commit-sha)/" or "code-$(version)/" and then create tarball
 	# To achieve prefixing, we temporarily create a symlink in the source directory that points back
@@ -566,7 +572,7 @@ light-source-dist: light-source-dist.tmp
 source-dist:
 	@echo \'source-dist\' target is deprecated: use \'full-source-dist\' instead.
 
-# Make tarball with Code code plus all dependencies
+# Make tarball with NeXTCode code plus all dependencies
 full-source-dist: light-source-dist.tmp
 	# Get all the dependencies downloaded
 	@$(MAKE) -C deps getall DEPS_GIT=0 USE_BINARYBUILDER=0
@@ -589,7 +595,7 @@ clean: | $(CLEAN_TARGETS)
 	@-$(MAKE) -C $(BUILDROOT)/src clean
 	@-$(MAKE) -C $(BUILDROOT)/cli clean
 	@-$(MAKE) -C $(BUILDROOT)/test clean
-	@-$(MAKE) -C $(BUILDROOT)/runtime clean
+	@-$(MAKE) -C $(BUILDROOT)/stdlib clean
 	@-$(MAKE) -C $(BUILDROOT) -f pkgimage.mk clean
 	-rm -f $(BUILDROOT)/code
 	-rm -f $(BUILDROOT)/*.tar.gz
@@ -606,13 +612,13 @@ cleanall: clean
 	-rm -fr $(build_prefix) $(build_staging)
 
 distcleanall: cleanall
-	@-$(MAKE) -C $(BUILDROOT)/runtime distclean
+	@-$(MAKE) -C $(BUILDROOT)/stdlib distclean
 	@-$(MAKE) -C $(BUILDROOT)/deps distcleanall
 	@-$(MAKE) -C $(BUILDROOT)/doc cleanall
 
 .FORCE:
 .PHONY: .FORCE default debug release check-whitespace release-candidate \
-	code-debug code-release code-runtime code-deps code-deps-libs \
+	code-debug code-release code-stdlib code-deps code-deps-libs \
 	code-cli-release code-cli-debug code-src-release code-src-debug \
 	code-symlink code-base code-sysimg code-sysimg-ji code-sysimg-release code-sysimg-debug \
 	test testall testall1 test \
@@ -647,7 +653,7 @@ win-extras:
 	@$(MAKE) -C $(BUILDROOT)/deps install-p7zip
 	mkdir -p $(CODEHOME)/dist-extras
 	cd $(CODEHOME)/dist-extras && \
-	$(JLDOWNLOAD) https://www.jrsoftware.org/download.php/is.exe && \
+	$(CODEDOWNLOAD) https://www.jrsoftware.org/download.php/is.exe && \
 	chmod a+x is.exe && \
 	MSYS2_ARG_CONV_EXCL='*' $(call spawn, $(CODEHOME)/dist-extras/is.exe /DIR="$(call cygpath_w,$(CODEHOME)/dist-extras/inno)" /PORTABLE=1 /CURRENTUSER /VERYSILENT)
 
