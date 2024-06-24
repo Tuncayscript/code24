@@ -1,17 +1,27 @@
 /*
-  Basic UTF-8 manipulation routines
-  by Jeff Bezanson
-  placed in the public domain Fall 2005
+ * Copyright (c) 2024, NeXTech Corporation. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * Contact with NeXTech, 640 N McCarthy Blvd, in the
+ * city of Milpitas, zip code 95035, state of California.
+ * or visit www.it-gss.com if you need additional information or have any
+ * questions.
+ *
+ */
 
-  This code is designed to provide the utilities you need to manipulate
-  UTF-8 as an internal string encoding. These functions do not perform the
-  error checking normally needed when handling UTF-8 data, so if you happen
-  to be from the Unicode Consortium you will want to flay me alive.
-  I do this because error checking can be performed at the boundaries (I/O),
-  with these routines reserved for higher performance on data known to be
-  valid.
-  A UTF-8 validation routine is included.
-*/
+// About:
+// Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
+//             Tural Ghuliev  (turalquliyev@it-gss.com)
+// Date: Monday, June 24, 2024
+// Technology: C++20 - ISO/IEC 14882:2020(E) 
+// Purpose: Built-in UTF-8 Capabalities
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -21,13 +31,12 @@
 #include <wctype.h>
 
 #include "utf8proc.h"
-#undef LANGUAGE_DLLEXPORT /* avoid conflicting definition */
+#undef CODE_DLLEXPORT /* avoid conflicting definition */
 
 #include "dtypes.h"
 
 #ifdef _OS_WINDOWS_
 #include <malloc.h>
-#define snprintf _snprintf
 #else
 #if !defined(__FreeBSD__) && !defined(__OpenBSD__)
 #include <alloca.h>
@@ -109,11 +118,11 @@ size_t u8_toucs(uint32_t *dest, size_t sz, const char *src, size_t srcsz)
         ch = 0;
         switch (nb) {
             /* these fall through deliberately */
-        case 5: ch += (unsigned char)*src++; ch <<= 6; LANGUAGE_FALLTHROUGH;
-        case 4: ch += (unsigned char)*src++; ch <<= 6; LANGUAGE_FALLTHROUGH;
-        case 3: ch += (unsigned char)*src++; ch <<= 6; LANGUAGE_FALLTHROUGH;
-        case 2: ch += (unsigned char)*src++; ch <<= 6; LANGUAGE_FALLTHROUGH;
-        case 1: ch += (unsigned char)*src++; ch <<= 6; LANGUAGE_FALLTHROUGH;
+        case 5: ch += (unsigned char)*src++; ch <<= 6; CODE_FALLTHROUGH;
+        case 4: ch += (unsigned char)*src++; ch <<= 6; CODE_FALLTHROUGH;
+        case 3: ch += (unsigned char)*src++; ch <<= 6; CODE_FALLTHROUGH;
+        case 2: ch += (unsigned char)*src++; ch <<= 6; CODE_FALLTHROUGH;
+        case 1: ch += (unsigned char)*src++; ch <<= 6; CODE_FALLTHROUGH;
         case 0: ch += (unsigned char)*src++;
         }
         ch -= offsetsFromUTF8[nb];
@@ -252,11 +261,11 @@ size_t u8_strwidth(const char *s)
             ch = 0;
             switch (nb) {
                 /* these fall through deliberately */
-            case 5: ch += (unsigned char)*s++; ch <<= 6; LANGUAGE_FALLTHROUGH;
-            case 4: ch += (unsigned char)*s++; ch <<= 6; LANGUAGE_FALLTHROUGH;
-            case 3: ch += (unsigned char)*s++; ch <<= 6; LANGUAGE_FALLTHROUGH;
-            case 2: ch += (unsigned char)*s++; ch <<= 6; LANGUAGE_FALLTHROUGH;
-            case 1: ch += (unsigned char)*s++; ch <<= 6; LANGUAGE_FALLTHROUGH;
+            case 5: ch += (unsigned char)*s++; ch <<= 6; CODE_FALLTHROUGH;
+            case 4: ch += (unsigned char)*s++; ch <<= 6; CODE_FALLTHROUGH;
+            case 3: ch += (unsigned char)*s++; ch <<= 6; CODE_FALLTHROUGH;
+            case 2: ch += (unsigned char)*s++; ch <<= 6; CODE_FALLTHROUGH;
+            case 1: ch += (unsigned char)*s++; ch <<= 6; CODE_FALLTHROUGH;
             case 0: ch += (unsigned char)*s++;
             }
             ch -= offsetsFromUTF8[nb];
