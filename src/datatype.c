@@ -1,18 +1,4 @@
-/*
- * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
- * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
-  *
- * This code is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
- * version 2 for more details (a copy is included in the LICENSE file that
- * accompanied this code).
- *
- * Contact with ITGSS, 651 N Broad St, Suite 201, in the
- * city of Middletown, zip code 19709, and county of New Castle, state of Delaware.
- * or visit www.it-gss.com if you need additional information or have any
- * questions.
- */
+// This file is a part of Julia. License is MIT: https://julialang.org/license
 
 /*
   defining DataTypes
@@ -24,9 +10,9 @@
 #include <stdarg.h>
 #include <stdalign.h>
 #include "code.h"
-#include "language_internal.h"
-#include "language_assert.h"
-#include "language_gcext.h"
+#include "code_internal.h"
+#include "code_assert.h"
+#include "code_gcext.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -1431,7 +1417,7 @@ UNBOX_FUNC(uint8pointer, uint8_t*)
     {                                                                   \
         language_task_t *ct = language_current_task;                                \
         language_value_t *v = language_gc_alloc(ct->ptls, LLT_ALIGN(sizeof(x), sizeof(void*)), \
-                                    code_##typ##_type);                   \
+                                    language_##typ##_type);                   \
         *(c_type*)language_data_ptr(v) = x;                                   \
         return v;                                                       \
     }
@@ -1455,8 +1441,8 @@ BOX_FUNC(uint8pointer, uint8_t*,  language_box)
         if ((u##c_type)idx < (u##c_type)NBOX_C)                         \
             return boxed_##typ##_cache[idx];                            \
         language_value_t *v = language_gc_alloc(ct->ptls, LLT_ALIGN(sizeof(x), sizeof(void*)), \
-                                    code_##typ##_type);                   \
-        language_set_typetagof(v, code_##typ##_tag, 0);                         \
+                                    language_##typ##_type);                   \
+        language_set_typetagof(v, language_##typ##_tag, 0);                         \
         *(c_type*)language_data_ptr(v) = x;                                   \
         return v;                                                       \
     }
@@ -1468,8 +1454,8 @@ BOX_FUNC(uint8pointer, uint8_t*,  language_box)
         if (x < NBOX_C)                                                 \
             return boxed_##typ##_cache[x];                              \
         language_value_t *v = language_gc_alloc(ct->ptls, LLT_ALIGN(sizeof(x), sizeof(void*)), \
-                                    code_##typ##_type);                   \
-        language_set_typetagof(v, code_##typ##_tag, 0);                         \
+                                    language_##typ##_type);                   \
+        language_set_typetagof(v, language_##typ##_tag, 0);                         \
         *(c_type*)language_data_ptr(v) = x;                                   \
         return v;                                                       \
     }
@@ -1750,7 +1736,7 @@ LANGUAGE_DLLEXPORT int language_field_index(language_datatype_t *t, language_sym
         }
     }
     if (err)
-        language_has_no_field_error(t->name->name, fld);
+        language_has_no_field_error(t, fld);
     return -1;
 }
 
@@ -2265,6 +2251,39 @@ LANGUAGE_DLLEXPORT size_t language_get_field_offset(language_datatype_t *ty, int
     if (!language_struct_try_layout(ty) || field > language_datatype_nfields(ty) || field < 1)
         language_bounds_error_int((language_value_t*)ty, field);
     return language_field_offset(ty, field - 1);
+}
+
+language_value_t *get_nth_pointer(language_value_t *v, size_t i)
+{
+    language_datatype_t *dt = (language_datatype_t*)language_typeof(v);
+    const language_datatype_layout_t *ly = dt->layout;
+    uint32_t npointers = ly->npointers;
+    if (i >= npointers)
+        language_bounds_error_int(v, i);
+    const uint8_t *ptrs8 = (const uint8_t *)language_dt_layout_ptrs(ly);
+    const uint16_t *ptrs16 = (const uint16_t *)language_dt_layout_ptrs(ly);
+    const uint32_t *ptrs32 = (const uint32_t*)language_dt_layout_ptrs(ly);
+    uint32_t fld;
+    if (ly->flags.fielddesc_type == 0)
+        fld = ptrs8[i];
+    else if (ly->flags.fielddesc_type == 1)
+        fld = ptrs16[i];
+    else
+        fld = ptrs32[i];
+    return language_atomic_load_relaxed((_Atomic(language_value_t*)*)(&((language_value_t**)v)[fld]));
+}
+
+LANGUAGE_DLLEXPORT language_value_t *language_get_nth_pointer(language_value_t *v, size_t i)
+{
+    language_value_t *ptrf = get_nth_pointer(v, i);
+    if (__unlikely(ptrf == NULL))
+        language_throw(language_undefref_exception);
+    return ptrf;
+}
+
+LANGUAGE_DLLEXPORT int language_nth_pointer_isdefined(language_value_t *v, size_t i)
+{
+    return get_nth_pointer(v, i) != NULL;
 }
 
 #ifdef __cplusplus
