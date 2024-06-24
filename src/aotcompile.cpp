@@ -1,24 +1,30 @@
 /*
- * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
+ * Copyright (c) 2024, NeXTech Corporation. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
-  *
+ *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * version 2 for more details (a copy is included in the LICENSE file that
  * accompanied this code).
  *
- * Contact with ITGSS, 651 N Broad St, Suite 201, in the
- * city of Middletown, zip code 19709, and county of New Castle, state of Delaware.
+ * Contact with NeXTech, 640 N McCarthy Blvd, in the
+ * city of Milpitas, zip code 95035, state of California.
  * or visit www.it-gss.com if you need additional information or have any
  * questions.
+ *
  */
+
+// About:
+// Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
+// Date: Monday, June 24, 2024
+// Technology: C++20 - ISO/IEC 14882:2020(E) 
 
 #include "llvm-version.h"
 #include "platform.h"
 
 // target support
-#if LANGUAGE_LLVM_VERSION >= 170000
+#if CODE_LLVM_VERSION >= 170000
 #include <llvm/TargetParser/Triple.h>
 #else
 #include <llvm/ADT/Triple.h>
@@ -80,16 +86,16 @@ using namespace llvm;
 
 #include "jitlayers.h"
 #include "serialize.h"
-#include "language_assert.h"
+#include "julia_assert.h"
 #include "processor.h"
 
-#define DEBUG_TYPE "language_aotcompile"
+#define DEBUG_TYPE "julia_aotcompile"
 
 STATISTIC(CICacheLookups, "Number of codeinst cache lookups");
-STATISTIC(CreateNativeCalls, "Number of language_create_native calls made");
-STATISTIC(CreateNativeMethods, "Number of methods compiled for language_create_native");
-STATISTIC(CreateNativeMax, "Max number of methods compiled at once for language_create_native");
-STATISTIC(CreateNativeGlobals, "Number of globals compiled for language_create_native");
+STATISTIC(CreateNativeCalls, "Number of code_create_native calls made");
+STATISTIC(CreateNativeMethods, "Number of methods compiled for code_create_native");
+STATISTIC(CreateNativeMax, "Max number of methods compiled at once for code_create_native");
+STATISTIC(CreateNativeGlobals, "Number of globals compiled for code_create_native");
 
 static void addComdat(GlobalValue *G, Triple &T)
 {
@@ -103,61 +109,61 @@ static void addComdat(GlobalValue *G, Triple &T)
 
 typedef struct {
     orc::ThreadSafeModule M;
-    SmallVector<GlobalValue*, 0> language_sysimg_fvars;
-    SmallVector<GlobalValue*, 0> language_sysimg_gvars;
-    std::map<language_code_instance_t*, std::tuple<uint32_t, uint32_t>> language_fvar_map;
-    SmallVector<void*, 0> language_value_to_llvm;
-    SmallVector<language_code_instance_t*, 0> language_external_to_llvm;
-} language_native_code_desc_t;
+    SmallVector<GlobalValue*, 0> code_sysimg_fvars;
+    SmallVector<GlobalValue*, 0> code_sysimg_gvars;
+    std::map<code_code_instance_t*, std::tuple<uint32_t, uint32_t>> code_fvar_map;
+    SmallVector<void*, 0> code_value_to_llvm;
+    SmallVector<code_code_instance_t*, 0> code_external_to_llvm;
+} code_native_code_desc_t;
 
-extern "C" LANGUAGE_DLLEXPORT_CODEGEN
-void language_get_function_id_impl(void *native_code, language_code_instance_t *codeinst,
+extern "C" CODE_DLLEXPORT_CODEGEN
+void code_get_function_id_impl(void *native_code, code_code_instance_t *codeinst,
         int32_t *func_idx, int32_t *specfunc_idx)
 {
-    language_native_code_desc_t *data = (language_native_code_desc_t*)native_code;
+    code_native_code_desc_t *data = (code_native_code_desc_t*)native_code;
     if (data) {
         // get the function index in the fvar lookup table
-        auto it = data->language_fvar_map.find(codeinst);
-        if (it != data->language_fvar_map.end()) {
+        auto it = data->code_fvar_map.find(codeinst);
+        if (it != data->code_fvar_map.end()) {
             std::tie(*func_idx, *specfunc_idx) = it->second;
         }
     }
 }
 
-extern "C" LANGUAGE_DLLEXPORT_CODEGEN
-void language_get_llvm_gvs_impl(void *native_code, arraylist_t *gvs)
+extern "C" CODE_DLLEXPORT_CODEGEN
+void code_get_llvm_gvs_impl(void *native_code, arraylist_t *gvs)
 {
-    // map a memory location (language_value_t or language_binding_t) to a GlobalVariable
-    language_native_code_desc_t *data = (language_native_code_desc_t*)native_code;
-    arraylist_grow(gvs, data->language_value_to_llvm.size());
-    memcpy(gvs->items, data->language_value_to_llvm.data(), gvs->len * sizeof(void*));
+    // map a memory location (code_value_t or code_binding_t) to a GlobalVariable
+    code_native_code_desc_t *data = (code_native_code_desc_t*)native_code;
+    arraylist_grow(gvs, data->code_value_to_llvm.size());
+    memcpy(gvs->items, data->code_value_to_llvm.data(), gvs->len * sizeof(void*));
 }
 
-extern "C" LANGUAGE_DLLEXPORT_CODEGEN
-void language_get_llvm_external_fns_impl(void *native_code, arraylist_t *external_fns)
+extern "C" CODE_DLLEXPORT_CODEGEN
+void code_get_llvm_external_fns_impl(void *native_code, arraylist_t *external_fns)
 {
-    language_native_code_desc_t *data = (language_native_code_desc_t*)native_code;
-    arraylist_grow(external_fns, data->language_external_to_llvm.size());
-    memcpy(external_fns->items, data->language_external_to_llvm.data(),
-        external_fns->len * sizeof(language_code_instance_t*));
+    code_native_code_desc_t *data = (code_native_code_desc_t*)native_code;
+    arraylist_grow(external_fns, data->code_external_to_llvm.size());
+    memcpy(external_fns->items, data->code_external_to_llvm.data(),
+        external_fns->len * sizeof(code_code_instance_t*));
 }
 
-extern "C" LANGUAGE_DLLEXPORT_CODEGEN
-LLVMOrcThreadSafeModuleRef language_get_llvm_module_impl(void *native_code)
+extern "C" CODE_DLLEXPORT_CODEGEN
+LLVMOrcThreadSafeModuleRef code_get_llvm_module_impl(void *native_code)
 {
-    language_native_code_desc_t *data = (language_native_code_desc_t*)native_code;
+    code_native_code_desc_t *data = (code_native_code_desc_t*)native_code;
     if (data)
         return wrap(&data->M);
     else
         return NULL;
 }
 
-extern "C" LANGUAGE_DLLEXPORT_CODEGEN
-GlobalValue* language_get_llvm_function_impl(void *native_code, uint32_t idx)
+extern "C" CODE_DLLEXPORT_CODEGEN
+GlobalValue* code_get_llvm_function_impl(void *native_code, uint32_t idx)
 {
-    language_native_code_desc_t *data = (language_native_code_desc_t*)native_code;
+    code_native_code_desc_t *data = (code_native_code_desc_t*)native_code;
     if (data)
-        return data->language_sysimg_fvars[idx];
+        return data->code_sysimg_fvars[idx];
     else
         return NULL;
 }
@@ -307,27 +313,27 @@ static void makeSafeName(GlobalObject &G)
         G.setName(StringRef(SafeName.data(), SafeName.size()));
 }
 
-language_code_instance_t *language_ci_cache_lookup(const language_cgparams_t &cgparams, language_method_instance_t *mi, size_t world)
+code_code_instance_t *code_ci_cache_lookup(const code_cgparams_t &cgparams, code_method_instance_t *mi, size_t world)
 {
     ++CICacheLookups;
-    language_value_t *ci = cgparams.lookup(mi, world, world);
-    LANGUAGE_GC_PROMISE_ROOTED(ci);
-    language_code_instance_t *codeinst = NULL;
-    if (ci != language_nothing) {
-        codeinst = (language_code_instance_t*)ci;
+    code_value_t *ci = cgparams.lookup(mi, world, world);
+    CODE_GC_PROMISE_ROOTED(ci);
+    code_code_instance_t *codeinst = NULL;
+    if (ci != code_nothing) {
+        codeinst = (code_code_instance_t*)ci;
     }
     else {
-        if (cgparams.lookup != language_rettype_inferred_addr) {
-            language_error("Refusing to automatically run type inference with custom cache lookup.");
+        if (cgparams.lookup != code_rettype_inferred_addr) {
+            code_error("Refusing to automatically run type inference with custom cache lookup.");
         }
         else {
-            codeinst = language_type_infer(mi, world, 0, SOURCE_MODE_ABI);
+            codeinst = code_type_infer(mi, world, SOURCE_MODE_ABI);
             /* Even if this codeinst is ordinarily not cacheable, we need to force
              * it into the cache here, since it was explicitly requested and is
              * otherwise not reachable from anywhere in the system image.
              */
-            if (!language_mi_cache_has_ci(mi, codeinst))
-                language_mi_cache_insert(mi, codeinst);
+            if (!code_mi_cache_has_ci(mi, codeinst))
+                code_mi_cache_insert(mi, codeinst);
         }
     }
     return codeinst;
@@ -335,88 +341,88 @@ language_code_instance_t *language_ci_cache_lookup(const language_cgparams_t &cg
 
 // takes the running content that has collected in the shadow module and dump it to disk
 // this builds the object file portion of the sysimage files for fast startup, and can
-// also be used be extern consumers like GPUCompiler.jl to obtain a module containing
+// also be used be extern consumers like GPUCompiler.code to obtain a module containing
 // all reachable & inferrrable functions.
 // The `policy` flag switches between the default mode `0` and the extern mode `1` used by GPUCompiler.
 // `_imaging_mode` controls if raw pointers can be embedded (e.g. the code will be loaded into the same session).
 // `_external_linkage` create linkages between pkgimages.
-extern "C" LANGUAGE_DLLEXPORT_CODEGEN
-void *language_create_native_impl(language_array_t *methods, LLVMOrcThreadSafeModuleRef llvmmod, const language_cgparams_t *cgparams, int _policy, int _imaging_mode, int _external_linkage, size_t _world)
+extern "C" CODE_DLLEXPORT_CODEGEN
+void *code_create_native_impl(code_array_t *methods, LLVMOrcThreadSafeModuleRef llvmmod, const code_cgparams_t *cgparams, int _policy, int _imaging_mode, int _external_linkage, size_t _world)
 {
-    LANGUAGE_TIMING(NATIVE_AOT, NATIVE_Create);
+    CODE_TIMING(NATIVE_AOT, NATIVE_Create);
     ++CreateNativeCalls;
-    CreateNativeMax.updateMax(language_array_nrows(methods));
+    CreateNativeMax.updateMax(code_array_nrows(methods));
     if (cgparams == NULL)
-        cgparams = &language_default_cgparams;
-    language_native_code_desc_t *data = new language_native_code_desc_t;
+        cgparams = &code_default_cgparams;
+    code_native_code_desc_t *data = new code_native_code_desc_t;
     CompilationPolicy policy = (CompilationPolicy) _policy;
     bool imaging = imaging_default() || _imaging_mode == 1;
-    language_method_instance_t *mi = NULL;
-    language_code_info_t *src = NULL;
-    LANGUAGE_GC_PUSH1(&src);
-    auto ct = language_current_task;
+    code_method_instance_t *mi = NULL;
+    code_code_info_t *src = NULL;
+    CODE_GC_PUSH1(&src);
+    auto ct = code_current_task;
     bool timed = (ct->reentrant_timing & 1) == 0;
     if (timed)
         ct->reentrant_timing |= 1;
     orc::ThreadSafeContext ctx;
     orc::ThreadSafeModule backing;
     if (!llvmmod) {
-        ctx = language_ExecutionEngine->acquireContext();
-        backing = language_create_ts_module("text", ctx);
+        ctx = code_ExecutionEngine->acquireContext();
+        backing = code_create_ts_module("text", ctx);
     }
     orc::ThreadSafeModule &clone = llvmmod ? *unwrap(llvmmod) : backing;
     auto ctxt = clone.getContext();
 
     uint64_t compiler_start_time = 0;
-    uint8_t measure_compile_time_enabled = language_atomic_load_relaxed(&language_measure_compile_time_enabled);
+    uint8_t measure_compile_time_enabled = code_atomic_load_relaxed(&code_measure_compile_time_enabled);
     if (measure_compile_time_enabled)
-        compiler_start_time = language_hrtime();
+        compiler_start_time = code_hrtime();
 
     // compile all methods for the current world and type-inference world
 
-    LANGUAGE_LOCK(&language_codegen_lock);
+    CODE_LOCK(&code_codegen_lock);
     auto target_info = clone.withModuleDo([&](Module &M) {
         return std::make_pair(M.getDataLayout(), Triple(M.getTargetTriple()));
     });
-    language_codegen_params_t params(ctxt, std::move(target_info.first), std::move(target_info.second));
+    code_codegen_params_t params(ctxt, std::move(target_info.first), std::move(target_info.second));
     params.params = cgparams;
     params.imaging_mode = imaging;
     params.debug_level = cgparams->debug_info_level;
     params.external_linkage = _external_linkage;
-    size_t compile_for[] = { language_typeinf_world, _world };
+    size_t compile_for[] = { code_typeinf_world, _world };
     for (int worlds = 0; worlds < 2; worlds++) {
-        LANGUAGE_TIMING(NATIVE_AOT, NATIVE_Codegen);
+        CODE_TIMING(NATIVE_AOT, NATIVE_Codegen);
         size_t this_world = compile_for[worlds];
         if (!this_world)
             continue;
         // Don't emit methods for the typeinf_world with extern policy
-        if (policy != CompilationPolicy::Default && this_world == language_typeinf_world)
+        if (policy != CompilationPolicy::Default && this_world == code_typeinf_world)
             continue;
         size_t i, l;
-        for (i = 0, l = language_array_nrows(methods); i < l; i++) {
+        for (i = 0, l = code_array_nrows(methods); i < l; i++) {
             // each item in this list is either a MethodInstance indicating something
             // to compile, or an svec(rettype, sig) describing a C-callable alias to create.
-            language_value_t *item = language_array_ptr_ref(methods, i);
-            if (language_is_simplevector(item)) {
+            code_value_t *item = code_array_ptr_ref(methods, i);
+            if (code_is_simplevector(item)) {
                 if (worlds == 1)
-                    language_compile_extern_c(wrap(&clone), &params, NULL, language_svecref(item, 0), language_svecref(item, 1));
+                    code_compile_extern_c(wrap(&clone), &params, NULL, code_svecref(item, 0), code_svecref(item, 1));
                 continue;
             }
-            mi = (language_method_instance_t*)item;
+            mi = (code_method_instance_t*)item;
             src = NULL;
             // if this method is generally visible to the current compilation world,
             // and this is either the primary world, or not applicable in the primary world
             // then we want to compile and emit this
-            if (language_atomic_load_relaxed(&mi->def.method->primary_world) <= this_world && this_world <= language_atomic_load_relaxed(&mi->def.method->deleted_world)) {
+            if (code_atomic_load_relaxed(&mi->def.method->primary_world) <= this_world && this_world <= code_atomic_load_relaxed(&mi->def.method->deleted_world)) {
                 // find and prepare the source code to compile
-                language_code_instance_t *codeinst = language_ci_cache_lookup(*cgparams, mi, this_world);
+                code_code_instance_t *codeinst = code_ci_cache_lookup(*cgparams, mi, this_world);
                 if (codeinst && !params.compiled_functions.count(codeinst)) {
                     // now add it to our compilation results
-                    LANGUAGE_GC_PROMISE_ROOTED(codeinst->rettype);
-                    orc::ThreadSafeModule result_m = language_create_ts_module(name_from_method_instance(codeinst->def),
+                    CODE_GC_PROMISE_ROOTED(codeinst->rettype);
+                    orc::ThreadSafeModule result_m = code_create_ts_module(name_from_method_instance(codeinst->def),
                             params.tsctx, clone.getModuleUnlocked()->getDataLayout(),
                             Triple(clone.getModuleUnlocked()->getTargetTriple()));
-                    language_llvm_functions_t decls = language_emit_codeinst(result_m, codeinst, NULL, params);
+                    code_llvm_functions_t decls = code_emit_codeinst(result_m, codeinst, NULL, params);
                     if (result_m)
                         params.compiled_functions[codeinst] = {std::move(result_m), std::move(decls)};
                 }
@@ -424,14 +430,14 @@ void *language_create_native_impl(language_array_t *methods, LLVMOrcThreadSafeMo
         }
 
         // finally, make sure all referenced methods also get compiled or fixed up
-        language_compile_workqueue(params, policy);
+        code_compile_workqueue(params, policy);
     }
-    LANGUAGE_UNLOCK(&language_codegen_lock); // Might GC
-    LANGUAGE_GC_POP();
+    CODE_UNLOCK(&code_codegen_lock); // Might GC
+    CODE_GC_POP();
 
-    // process the globals array, before language_merge_module destroys them
+    // process the globals array, before code_merge_module destroys them
     SmallVector<std::string, 0> gvars(params.global_targets.size());
-    data->language_value_to_llvm.resize(params.global_targets.size());
+    data->code_value_to_llvm.resize(params.global_targets.size());
     StringSet<> gvars_names;
     DenseSet<GlobalValue *> gvars_set;
 
@@ -441,24 +447,24 @@ void *language_create_native_impl(language_array_t *methods, LLVMOrcThreadSafeMo
         global.second->setInitializer(literal_static_pointer_val(global.first, global.second->getValueType()));
         assert(gvars_set.insert(global.second).second && "Duplicate gvar in params!");
         assert(gvars_names.insert(gvars[idx]).second && "Duplicate gvar name in params!");
-        data->language_value_to_llvm[idx] = global.first;
+        data->code_value_to_llvm[idx] = global.first;
         idx++;
     }
     CreateNativeMethods += params.compiled_functions.size();
 
     size_t offset = gvars.size();
-    data->language_external_to_llvm.resize(params.external_fns.size());
+    data->code_external_to_llvm.resize(params.external_fns.size());
 
     for (auto &extern_fn : params.external_fns) {
-        language_code_instance_t *this_code = std::get<0>(extern_fn.first);
+        code_code_instance_t *this_code = std::get<0>(extern_fn.first);
         bool specsig = std::get<1>(extern_fn.first);
         assert(specsig && "Error external_fns doesn't handle non-specsig yet");
         (void) specsig;
         GlobalVariable *F = extern_fn.second;
         size_t idx = gvars.size() - offset;
         assert(idx >= 0);
-        assert(idx < data->language_external_to_llvm.size());
-        data->language_external_to_llvm[idx] = this_code;
+        assert(idx < data->code_external_to_llvm.size());
+        data->code_external_to_llvm[idx] = this_code;
         assert(gvars_set.insert(F).second && "Duplicate gvar in params!");
         assert(gvars_names.insert(F->getName()).second && "Duplicate gvar name in params!");
         gvars.push_back(std::string(F->getName()));
@@ -467,33 +473,33 @@ void *language_create_native_impl(language_array_t *methods, LLVMOrcThreadSafeMo
     // clones the contents of the module `m` to the shadow_output collector
     // while examining and recording what kind of function pointer we have
     {
-        LANGUAGE_TIMING(NATIVE_AOT, NATIVE_Merge);
+        CODE_TIMING(NATIVE_AOT, NATIVE_Merge);
         Linker L(*clone.getModuleUnlocked());
         for (auto &def : params.compiled_functions) {
-            language_merge_module(clone, std::move(std::get<0>(def.second)));
-            language_code_instance_t *this_code = def.first;
-            language_llvm_functions_t decls = std::get<1>(def.second);
+            code_merge_module(clone, std::move(std::get<0>(def.second)));
+            code_code_instance_t *this_code = def.first;
+            code_llvm_functions_t decls = std::get<1>(def.second);
             StringRef func = decls.functionObject;
             StringRef cfunc = decls.specFunctionObject;
             uint32_t func_id = 0;
             uint32_t cfunc_id = 0;
-            if (func == "language_fptr_args") {
+            if (func == "code_fptr_args") {
                 func_id = -1;
             }
-            else if (func == "language_fptr_sparam") {
+            else if (func == "code_fptr_sparam") {
                 func_id = -2;
             }
             else {
                 //Safe b/c context is locked by params
-                data->language_sysimg_fvars.push_back(cast<Function>(clone.getModuleUnlocked()->getNamedValue(func)));
-                func_id = data->language_sysimg_fvars.size();
+                data->code_sysimg_fvars.push_back(cast<Function>(clone.getModuleUnlocked()->getNamedValue(func)));
+                func_id = data->code_sysimg_fvars.size();
             }
             if (!cfunc.empty()) {
                 //Safe b/c context is locked by params
-                data->language_sysimg_fvars.push_back(cast<Function>(clone.getModuleUnlocked()->getNamedValue(cfunc)));
-                cfunc_id = data->language_sysimg_fvars.size();
+                data->code_sysimg_fvars.push_back(cast<Function>(clone.getModuleUnlocked()->getNamedValue(cfunc)));
+                cfunc_id = data->code_sysimg_fvars.size();
             }
-            data->language_fvar_map[this_code] = std::make_tuple(func_id, cfunc_id);
+            data->code_fvar_map[this_code] = std::make_tuple(func_id, cfunc_id);
         }
         if (params._shared_module) {
             bool error = L.linkInModule(std::move(params._shared_module));
@@ -510,7 +516,7 @@ void *language_create_native_impl(language_array_t *methods, LLVMOrcThreadSafeMo
         assert(G->hasInitializer());
         G->setLinkage(GlobalValue::InternalLinkage);
         G->setDSOLocal(true);
-        data->language_sysimg_gvars.push_back(G);
+        data->code_sysimg_gvars.push_back(G);
     }
     CreateNativeGlobals += gvars.size();
 
@@ -522,7 +528,7 @@ void *language_create_native_impl(language_array_t *methods, LLVMOrcThreadSafeMo
         // so make sure everything has something set
         Type *T_int32 = Type::getInt32Ty(clone.getModuleUnlocked()->getContext());
         juliapersonality_func = Function::Create(FunctionType::get(T_int32, true),
-            Function::ExternalLinkage, "__language_personality", clone.getModuleUnlocked());
+            Function::ExternalLinkage, "__julia_personality", clone.getModuleUnlocked());
         juliapersonality_func->setDLLStorageClass(GlobalValue::DLLImportStorageClass);
     }
 
@@ -548,13 +554,13 @@ void *language_create_native_impl(language_array_t *methods, LLVMOrcThreadSafeMo
     data->M = std::move(clone);
     if (timed) {
         if (measure_compile_time_enabled) {
-            auto end = language_hrtime();
-            language_atomic_fetch_add_relaxed(&language_cumulative_compile_time, end - compiler_start_time);
+            auto end = code_hrtime();
+            code_atomic_fetch_add_relaxed(&code_cumulative_compile_time, end - compiler_start_time);
         }
         ct->reentrant_timing &= ~1ull;
     }
     if (ctx.getContext()) {
-        language_ExecutionEngine->releaseContext(std::move(ctx));
+        code_ExecutionEngine->releaseContext(std::move(ctx));
     }
     return (void*)data;
 }
@@ -570,7 +576,7 @@ typedef Error ArchiveWriterError;
 static void reportWriterError(const ErrorInfoBase &E)
 {
     std::string err = E.message();
-    language_safe_printf("ERROR: failed to emit output file %s\n", err.c_str());
+    code_safe_printf("ERROR: failed to emit output file %s\n", err.c_str());
 }
 
 static void injectCRTAlias(Module &M, StringRef name, StringRef alias, FunctionType *FT)
@@ -592,9 +598,9 @@ static void injectCRTAlias(Module &M, StringRef name, StringRef alias, FunctionT
 
 void multiversioning_preannotate(Module &M);
 
-// See src/processor.h for documentation about this table. Corresponds to language_image_shard_t.
+// See src/processor.h for documentation about this table. Corresponds to code_image_shard_t.
 static GlobalVariable *emit_shard_table(Module &M, Type *T_size, Type *T_psize, unsigned threads) {
-    SmallVector<Constant *, 0> tables(sizeof(language_image_shard_t) / sizeof(void *) * threads);
+    SmallVector<Constant *, 0> tables(sizeof(code_image_shard_t) / sizeof(void *) * threads);
     for (unsigned i = 0; i < threads; i++) {
         auto suffix = "_" + std::to_string(i);
         auto create_gv = [&](StringRef name, bool constant) {
@@ -604,30 +610,30 @@ static GlobalVariable *emit_shard_table(Module &M, Type *T_size, Type *T_psize, 
             gv->setDSOLocal(true);
             return gv;
         };
-        auto table = tables.data() + i * sizeof(language_image_shard_t) / sizeof(void *);
-        table[offsetof(language_image_shard_t, fvar_count) / sizeof(void*)] = create_gv("language_fvar_count", true);
-        table[offsetof(language_image_shard_t, fvar_ptrs) / sizeof(void*)] = create_gv("language_fvar_ptrs", true);
-        table[offsetof(language_image_shard_t, fvar_idxs) / sizeof(void*)] = create_gv("language_fvar_idxs", true);
-        table[offsetof(language_image_shard_t, gvar_offsets) / sizeof(void*)] = create_gv("language_gvar_offsets", true);
-        table[offsetof(language_image_shard_t, gvar_idxs) / sizeof(void*)] = create_gv("language_gvar_idxs", true);
-        table[offsetof(language_image_shard_t, clone_slots) / sizeof(void*)] = create_gv("language_clone_slots", true);
-        table[offsetof(language_image_shard_t, clone_ptrs) / sizeof(void*)] = create_gv("language_clone_ptrs", true);
-        table[offsetof(language_image_shard_t, clone_idxs) / sizeof(void*)] = create_gv("language_clone_idxs", true);
+        auto table = tables.data() + i * sizeof(code_image_shard_t) / sizeof(void *);
+        table[offsetof(code_image_shard_t, fvar_count) / sizeof(void*)] = create_gv("code_fvar_count", true);
+        table[offsetof(code_image_shard_t, fvar_ptrs) / sizeof(void*)] = create_gv("code_fvar_ptrs", true);
+        table[offsetof(code_image_shard_t, fvar_idxs) / sizeof(void*)] = create_gv("code_fvar_idxs", true);
+        table[offsetof(code_image_shard_t, gvar_offsets) / sizeof(void*)] = create_gv("code_gvar_offsets", true);
+        table[offsetof(code_image_shard_t, gvar_idxs) / sizeof(void*)] = create_gv("code_gvar_idxs", true);
+        table[offsetof(code_image_shard_t, clone_slots) / sizeof(void*)] = create_gv("code_clone_slots", true);
+        table[offsetof(code_image_shard_t, clone_ptrs) / sizeof(void*)] = create_gv("code_clone_ptrs", true);
+        table[offsetof(code_image_shard_t, clone_idxs) / sizeof(void*)] = create_gv("code_clone_idxs", true);
     }
     auto tables_arr = ConstantArray::get(ArrayType::get(T_psize, tables.size()), tables);
     auto tables_gv = new GlobalVariable(M, tables_arr->getType(), false,
-                                        GlobalValue::ExternalLinkage, tables_arr, "language_shard_tables");
+                                        GlobalValue::ExternalLinkage, tables_arr, "code_shard_tables");
     tables_gv->setVisibility(GlobalValue::HiddenVisibility);
     tables_gv->setDSOLocal(true);
     return tables_gv;
 }
 
-// See src/processor.h for documentation about this table. Corresponds to language_image_ptls_t.
+// See src/processor.h for documentation about this table. Corresponds to code_image_ptls_t.
 static GlobalVariable *emit_ptls_table(Module &M, Type *T_size, Type *T_psize) {
     std::array<Constant *, 3> ptls_table{
-        new GlobalVariable(M, T_size, false, GlobalValue::ExternalLinkage, Constant::getNullValue(T_size), "language_pgcstack_func_slot"),
-        new GlobalVariable(M, T_size, false, GlobalValue::ExternalLinkage, Constant::getNullValue(T_size), "language_pgcstack_key_slot"),
-        new GlobalVariable(M, T_size, false, GlobalValue::ExternalLinkage, Constant::getNullValue(T_size), "language_tls_offset"),
+        new GlobalVariable(M, T_size, false, GlobalValue::ExternalLinkage, Constant::getNullValue(T_size), "code_pgcstack_func_slot"),
+        new GlobalVariable(M, T_size, false, GlobalValue::ExternalLinkage, Constant::getNullValue(T_size), "code_pgcstack_key_slot"),
+        new GlobalVariable(M, T_size, false, GlobalValue::ExternalLinkage, Constant::getNullValue(T_size), "code_tls_offset"),
     };
     for (auto &gv : ptls_table) {
         cast<GlobalVariable>(gv)->setVisibility(GlobalValue::HiddenVisibility);
@@ -635,13 +641,13 @@ static GlobalVariable *emit_ptls_table(Module &M, Type *T_size, Type *T_psize) {
     }
     auto ptls_table_arr = ConstantArray::get(ArrayType::get(T_psize, ptls_table.size()), ptls_table);
     auto ptls_table_gv = new GlobalVariable(M, ptls_table_arr->getType(), false,
-                                            GlobalValue::ExternalLinkage, ptls_table_arr, "language_ptls_table");
+                                            GlobalValue::ExternalLinkage, ptls_table_arr, "code_ptls_table");
     ptls_table_gv->setVisibility(GlobalValue::HiddenVisibility);
     ptls_table_gv->setDSOLocal(true);
     return ptls_table_gv;
 }
 
-// See src/processor.h for documentation about this table. Corresponds to language_image_header_t.
+// See src/processor.h for documentation about this table. Corresponds to code_image_header_t.
 static GlobalVariable *emit_image_header(Module &M, unsigned threads, unsigned nfvars, unsigned ngvars) {
     constexpr uint32_t version = 1;
     std::array<uint32_t, 4> header{
@@ -652,16 +658,16 @@ static GlobalVariable *emit_image_header(Module &M, unsigned threads, unsigned n
     };
     auto header_arr = ConstantDataArray::get(M.getContext(), header);
     auto header_gv = new GlobalVariable(M, header_arr->getType(), false,
-                                        GlobalValue::InternalLinkage, header_arr, "language_image_header");
+                                        GlobalValue::InternalLinkage, header_arr, "code_image_header");
     return header_gv;
 }
 
 // Grab fvars and gvars data from the module
 static void get_fvars_gvars(Module &M, DenseMap<GlobalValue *, unsigned> &fvars, DenseMap<GlobalValue *, unsigned> &gvars) {
-    auto fvars_gv = M.getGlobalVariable("language_fvars");
-    auto gvars_gv = M.getGlobalVariable("language_gvars");
-    auto fvars_idxs = M.getGlobalVariable("language_fvar_idxs");
-    auto gvars_idxs = M.getGlobalVariable("language_gvar_idxs");
+    auto fvars_gv = M.getGlobalVariable("code_fvars");
+    auto gvars_gv = M.getGlobalVariable("code_gvars");
+    auto fvars_idxs = M.getGlobalVariable("code_fvar_idxs");
+    auto gvars_idxs = M.getGlobalVariable("code_gvar_idxs");
     assert(fvars_gv);
     assert(gvars_gv);
     assert(fvars_idxs);
@@ -714,7 +720,7 @@ static FunctionInfo getFunctionWeight(const Function &F)
         auto val = F.getFnAttribute("julia.mv.clones").getValueAsString();
         // base16, so must be at most 4 * length bits long
         // popcount gives number of clones
-        #if LANGUAGE_LLVM_VERSION >= 170000
+        #if CODE_LLVM_VERSION >= 170000
         info.clones = APInt(val.size() * 4, val, 16).popcount() + 1;
         #else
         info.clones = APInt(val.size() * 4, val, 16).countPopulation() + 1;
@@ -783,7 +789,7 @@ static bool canPartition(const GlobalValue &G) {
 
 static inline bool verify_partitioning(const SmallVectorImpl<Partition> &partitions, const Module &M, size_t fvars_size, size_t gvars_size) {
     bool bad = false;
-#ifndef LANGUAGE_NDEBUG
+#ifndef CODE_NDEBUG
     SmallVector<uint32_t, 0> fvars(fvars_size);
     SmallVector<uint32_t, 0> gvars(gvars_size);
     StringMap<uint32_t> GVNames;
@@ -1007,11 +1013,11 @@ struct ImageTimer {
     std::string desc;
 
     void startTimer() {
-        elapsed = language_hrtime();
+        elapsed = code_hrtime();
     }
 
     void stopTimer() {
-        elapsed = language_hrtime() - elapsed;
+        elapsed = code_hrtime() - elapsed;
     }
 
     void init(const Twine &name, const Twine &desc) {
@@ -1111,7 +1117,7 @@ static AOTOutputs add_output_impl(Module &M, TargetMachine &SourceTM, ShardTimer
                 SourceTM.getCodeModel(),
                 SourceTM.getOptLevel()));
         fixupTM(*PMTM);
-        NewPM optimizer{std::move(PMTM), getOptLevel(language_options.opt_level), OptimizationOptions::defaults(true, true)};
+        NewPM optimizer{std::move(PMTM), getOptLevel(code_options.opt_level), OptimizationOptions::defaults(true, true)};
         optimizer.run(M);
         assert(!verifyLLVMIR(M));
         bool inject_aliases = false;
@@ -1129,36 +1135,36 @@ static AOTOutputs add_output_impl(Module &M, TargetMachine &SourceTM, ShardTimer
             // So for now we inject a definition of these functions that calls our runtime
             // functions. We do so after optimization to avoid cloning these functions.
             // Float16 conversion routines
-#if defined(_CPU_X86_64_) && defined(_OS_DARWIN_) && LANGUAGE_LLVM_VERSION >= 160000
+#if defined(_CPU_X86_64_) && defined(_OS_DARWIN_) && CODE_LLVM_VERSION >= 160000
             // LLVM 16 reverted to soft-float ABI for passing half on x86_64 Darwin
             // https://github.com/llvm/llvm-project/commit/2bcf51c7f82ca7752d1bba390a2e0cb5fdd05ca9
-            injectCRTAlias(M, "__gnu_h2f_ieee", "language_half_to_float",
+            injectCRTAlias(M, "__gnu_h2f_ieee", "julia_half_to_float",
                     FunctionType::get(Type::getFloatTy(M.getContext()), { Type::getInt16Ty(M.getContext()) }, false));
-            injectCRTAlias(M, "__extendhfsf2", "language_half_to_float",
+            injectCRTAlias(M, "__extendhfsf2", "julia_half_to_float",
                     FunctionType::get(Type::getFloatTy(M.getContext()), { Type::getInt16Ty(M.getContext()) }, false));
-            injectCRTAlias(M, "__gnu_f2h_ieee", "language_float_to_half",
+            injectCRTAlias(M, "__gnu_f2h_ieee", "julia_float_to_half",
                     FunctionType::get(Type::getInt16Ty(M.getContext()), { Type::getFloatTy(M.getContext()) }, false));
-            injectCRTAlias(M, "__truncsfhf2", "language_float_to_half",
+            injectCRTAlias(M, "__truncsfhf2", "julia_float_to_half",
                     FunctionType::get(Type::getInt16Ty(M.getContext()), { Type::getFloatTy(M.getContext()) }, false));
-            injectCRTAlias(M, "__truncdfhf2", "language_double_to_half",
+            injectCRTAlias(M, "__truncdfhf2", "julia_double_to_half",
                     FunctionType::get(Type::getInt16Ty(M.getContext()), { Type::getDoubleTy(M.getContext()) }, false));
 #else
-            injectCRTAlias(M, "__gnu_h2f_ieee", "language__gnu_h2f_ieee",
+            injectCRTAlias(M, "__gnu_h2f_ieee", "julia__gnu_h2f_ieee",
                     FunctionType::get(Type::getFloatTy(M.getContext()), { Type::getHalfTy(M.getContext()) }, false));
-            injectCRTAlias(M, "__extendhfsf2", "language__gnu_h2f_ieee",
+            injectCRTAlias(M, "__extendhfsf2", "julia__gnu_h2f_ieee",
                     FunctionType::get(Type::getFloatTy(M.getContext()), { Type::getHalfTy(M.getContext()) }, false));
-            injectCRTAlias(M, "__gnu_f2h_ieee", "language__gnu_f2h_ieee",
+            injectCRTAlias(M, "__gnu_f2h_ieee", "julia__gnu_f2h_ieee",
                     FunctionType::get(Type::getHalfTy(M.getContext()), { Type::getFloatTy(M.getContext()) }, false));
-            injectCRTAlias(M, "__truncsfhf2", "language__gnu_f2h_ieee",
+            injectCRTAlias(M, "__truncsfhf2", "julia__gnu_f2h_ieee",
                     FunctionType::get(Type::getHalfTy(M.getContext()), { Type::getFloatTy(M.getContext()) }, false));
-            injectCRTAlias(M, "__truncdfhf2", "language__truncdfhf2",
+            injectCRTAlias(M, "__truncdfhf2", "julia__truncdfhf2",
                     FunctionType::get(Type::getHalfTy(M.getContext()), { Type::getDoubleTy(M.getContext()) }, false));
 #endif
 
             // BFloat16 conversion routines
-            injectCRTAlias(M, "__truncsfbf2", "language__truncsfbf2",
+            injectCRTAlias(M, "__truncsfbf2", "julia__truncsfbf2",
                     FunctionType::get(Type::getBFloatTy(M.getContext()), { Type::getFloatTy(M.getContext()) }, false));
-            injectCRTAlias(M, "__truncsdbf2", "language__truncdfbf2",
+            injectCRTAlias(M, "__truncsdbf2", "julia__truncdfbf2",
                     FunctionType::get(Type::getBFloatTy(M.getContext()), { Type::getDoubleTy(M.getContext()) }, false));
         }
         timers.optimize.stopTimer();
@@ -1181,7 +1187,7 @@ static AOTOutputs add_output_impl(Module &M, TargetMachine &SourceTM, ShardTimer
         legacy::PassManager emitter;
         addTargetPasses(&emitter, TM->getTargetTriple(), TM->getTargetIRAnalysis());
         if (TM->addPassesToEmitFile(emitter, OS, nullptr, CGFT_ObjectFile, false))
-            language_safe_printf("ERROR: target does not support generation of object files\n");
+            code_safe_printf("ERROR: target does not support generation of object files\n");
         emitter.run(M);
         timers.obj.stopTimer();
     }
@@ -1192,7 +1198,7 @@ static AOTOutputs add_output_impl(Module &M, TargetMachine &SourceTM, ShardTimer
         legacy::PassManager emitter;
         addTargetPasses(&emitter, TM->getTargetTriple(), TM->getTargetIRAnalysis());
         if (TM->addPassesToEmitFile(emitter, OS, nullptr, CGFT_AssemblyFile, false))
-            language_safe_printf("ERROR: target does not support generation of assembly files\n");
+            code_safe_printf("ERROR: target does not support generation of assembly files\n");
         emitter.run(M);
         timers.asm_.stopTimer();
     }
@@ -1256,6 +1262,8 @@ static void materializePreserved(Module &M, Partition &partition) {
         GV.setInitializer(nullptr);
         GV.setLinkage(GlobalValue::ExternalLinkage);
         GV.setVisibility(GlobalValue::HiddenVisibility);
+        if (GV.getDLLStorageClass() != GlobalValue::DLLStorageClassTypes::DefaultStorageClass)
+            continue; // Don't mess with exported or imported globals
         GV.setDSOLocal(true);
     }
 
@@ -1301,7 +1309,7 @@ static void materializePreserved(Module &M, Partition &partition) {
     }
 }
 
-// Reconstruct language_fvars, language_gvars, language_fvars_idxs, and language_gvars_idxs from the partition
+// Reconstruct code_fvars, code_gvars, code_fvars_idxs, and code_gvars_idxs from the partition
 static void construct_vars(Module &M, Partition &partition, StringRef suffix) {
     SmallVector<std::pair<uint32_t, GlobalValue *>> fvar_pairs;
     fvar_pairs.reserve(partition.fvars.size());
@@ -1340,18 +1348,18 @@ static void construct_vars(Module &M, Partition &partition, StringRef suffix) {
 
     // Now commit the fvars, gvars, and idxs
     auto T_size = M.getDataLayout().getIntPtrType(M.getContext());
-    emit_table(M, fvars, "language_fvars", T_size->getPointerTo());
-    emit_offset_table(M, T_size, gvars, "language_gvar", suffix);
+    emit_table(M, fvars, "code_fvars", T_size->getPointerTo());
+    emit_offset_table(M, T_size, gvars, "code_gvar", suffix);
     auto fidxs = ConstantDataArray::get(M.getContext(), fvar_idxs);
     auto fidxs_var = new GlobalVariable(M, fidxs->getType(), true,
                                         GlobalVariable::ExternalLinkage,
-                                        fidxs, "language_fvar_idxs");
+                                        fidxs, "code_fvar_idxs");
     fidxs_var->setVisibility(GlobalValue::HiddenVisibility);
     fidxs_var->setDSOLocal(true);
     auto gidxs = ConstantDataArray::get(M.getContext(), gvar_idxs);
     auto gidxs_var = new GlobalVariable(M, gidxs->getType(), true,
                                         GlobalVariable::ExternalLinkage,
-                                        gidxs, "language_gvar_idxs" + suffix);
+                                        gidxs, "code_gvar_idxs" + suffix);
     gidxs_var->setVisibility(GlobalValue::HiddenVisibility);
     gidxs_var->setDSOLocal(true);
 }
@@ -1390,7 +1398,7 @@ static SmallVector<AOTOutputs, 16> add_output(Module &M, TargetMachine &TM, Stri
     Timer serialize_timer("serialize", "Serialize module", timer_group);
     Timer output_timer("output", "Add outputs", timer_group);
     bool report_timings = false;
-    if (auto env = getenv("JULIA_IMAGE_TIMINGS")) {
+    if (auto env = getenv("CODE_IMAGE_TIMINGS")) {
         char *endptr;
         unsigned long val = strtoul(env, &endptr, 10);
         if (endptr != env && !*endptr && val <= 1) {
@@ -1401,20 +1409,20 @@ static SmallVector<AOTOutputs, 16> add_output(Module &M, TargetMachine &TM, Stri
             else if (StringRef("false").compare_insensitive(env) == 0)
                 report_timings = false;
             else
-                errs() << "WARNING: Invalid value for JULIA_IMAGE_TIMINGS: " << env << "\n";
+                errs() << "WARNING: Invalid value for CODE_IMAGE_TIMINGS: " << env << "\n";
         }
     }
     // Single-threaded case
     if (threads == 1) {
         output_timer.startTimer();
         {
-            LANGUAGE_TIMING(NATIVE_AOT, NATIVE_Opt);
+            CODE_TIMING(NATIVE_AOT, NATIVE_Opt);
             // convert gvars to the expected offset table format for shard 0
-            if (M.getGlobalVariable("language_gvars")) {
-                auto gvars = consume_gv<Constant>(M, "language_gvars", false);
+            if (M.getGlobalVariable("code_gvars")) {
+                auto gvars = consume_gv<Constant>(M, "code_gvars", false);
                 Type *T_size = M.getDataLayout().getIntPtrType(M.getContext());
-                emit_offset_table(M, T_size, gvars, "language_gvar", "_0"); // module flag "julia.mv.suffix"
-                M.getGlobalVariable("language_gvar_idxs")->setName("language_gvar_idxs_0");
+                emit_offset_table(M, T_size, gvars, "code_gvar", "_0"); // module flag "julia.mv.suffix"
+                M.getGlobalVariable("code_gvar_idxs")->setName("code_gvar_idxs_0");
             }
             outputs[0] = add_output_impl(M, TM, timers[0], unopt_out, opt_out, obj_out, asm_out);
         }
@@ -1439,7 +1447,7 @@ static SmallVector<AOTOutputs, 16> add_output(Module &M, TargetMachine &TM, Stri
     // We use a prefix to avoid name conflicts with user code.
     for (auto &G : M.global_values()) {
         if (!G.isDeclaration() && !G.hasName()) {
-            G.setName("language_ext_" + Twine(counter++));
+            G.setName("code_ext_" + Twine(counter++));
         }
     }
     auto partitions = partitionModule(M, threads);
@@ -1456,12 +1464,12 @@ static SmallVector<AOTOutputs, 16> add_output(Module &M, TargetMachine &TM, Stri
 
     // Start all of the worker threads
     {
-        LANGUAGE_TIMING(NATIVE_AOT, NATIVE_Opt);
+        CODE_TIMING(NATIVE_AOT, NATIVE_Opt);
         std::vector<uv_thread_t> workers(threads);
         for (unsigned i = 0; i < threads; i++) {
             std::function<void()> func = [&, i]() {
                 LLVMContext ctx;
-                #if LANGUAGE_LLVM_VERSION < 170000
+                #if CODE_LLVM_VERSION < 170000
                 SetOpaquePointer(ctx);
                 #endif
                 // Lazily deserialize the entire module
@@ -1524,14 +1532,14 @@ static SmallVector<AOTOutputs, 16> add_output(Module &M, TargetMachine &TM, Stri
     return outputs;
 }
 
-extern int language_is_timing_passes;
+extern int code_is_timing_passes;
 static unsigned compute_image_thread_count(const ModuleInfo &info) {
     // 32-bit systems are very memory-constrained
 #ifdef _P32
     LLVM_DEBUG(dbgs() << "32-bit systems are restricted to a single thread\n");
     return 1;
 #endif
-    if (language_is_timing_passes) // LLVM isn't thread safe when timing the passes https://github.com/llvm/llvm-project/issues/44417
+    if (code_is_timing_passes) // LLVM isn't thread safe when timing the passes https://github.com/llvm/llvm-project/issues/44417
         return 1;
     // COFF has limits on external symbols (even hidden) up to 65536. We reserve the last few
     // for any of our other symbols that we insert during compilation.
@@ -1546,7 +1554,7 @@ static unsigned compute_image_thread_count(const ModuleInfo &info) {
         return 1;
     }
 
-    unsigned threads = std::max(language_cpu_threads() / 2, 1);
+    unsigned threads = std::max(code_cpu_threads() / 2, 1);
 
     auto max_threads = info.globals / 100;
     if (max_threads < threads) {
@@ -1555,15 +1563,15 @@ static unsigned compute_image_thread_count(const ModuleInfo &info) {
     }
 
     // environment variable override
-    const char *env_threads = getenv("JULIA_IMAGE_THREADS");
+    const char *env_threads = getenv("CODE_IMAGE_THREADS");
     bool env_threads_set = false;
     if (env_threads) {
         char *endptr;
         unsigned long requested = strtoul(env_threads, &endptr, 10);
         if (*endptr || !requested) {
-            language_safe_printf("WARNING: invalid value '%s' for JULIA_IMAGE_THREADS\n", env_threads);
+            code_safe_printf("WARNING: invalid value '%s' for CODE_IMAGE_THREADS\n", env_threads);
         } else {
-            LLVM_DEBUG(dbgs() << "Overriding threads to " << requested << " due to JULIA_IMAGE_THREADS\n");
+            LLVM_DEBUG(dbgs() << "Overriding threads to " << requested << " due to CODE_IMAGE_THREADS\n");
             threads = requested;
             env_threads_set = true;
         }
@@ -1571,13 +1579,13 @@ static unsigned compute_image_thread_count(const ModuleInfo &info) {
 
     // more defaults
     if (!env_threads_set && threads > 1) {
-        if (auto fallbackenv = getenv("JULIA_CPU_THREADS")) {
+        if (auto fallbackenv = getenv("CODE_CPU_THREADS")) {
             char *endptr;
             unsigned long requested = strtoul(fallbackenv, &endptr, 10);
             if (*endptr || !requested) {
-                language_safe_printf("WARNING: invalid value '%s' for JULIA_CPU_THREADS\n", fallbackenv);
+                code_safe_printf("WARNING: invalid value '%s' for CODE_CPU_THREADS\n", fallbackenv);
             } else if (requested < threads) {
-                LLVM_DEBUG(dbgs() << "Overriding threads to " << requested << " due to JULIA_CPU_THREADS\n");
+                LLVM_DEBUG(dbgs() << "Overriding threads to " << requested << " due to CODE_CPU_THREADS\n");
                 threads = requested;
             }
         }
@@ -1588,19 +1596,19 @@ static unsigned compute_image_thread_count(const ModuleInfo &info) {
     return threads;
 }
 
-language_emission_params_t default_emission_params = { 1 };
+code_emission_params_t default_emission_params = { 1 };
 
 // takes the running content that has collected in the shadow module and dump it to disk
 // this builds the object file portion of the sysimage files for fast startup
-extern "C" LANGUAGE_DLLEXPORT_CODEGEN
-void language_dump_native_impl(void *native_code,
+extern "C" CODE_DLLEXPORT_CODEGEN
+void code_dump_native_impl(void *native_code,
         const char *bc_fname, const char *unopt_bc_fname, const char *obj_fname,
         const char *asm_fname,
         ios_t *z, ios_t *s,
-        language_emission_params_t *params)
+        code_emission_params_t *params)
 {
-    LANGUAGE_TIMING(NATIVE_AOT, NATIVE_Dump);
-    language_native_code_desc_t *data = (language_native_code_desc_t*)native_code;
+    CODE_TIMING(NATIVE_AOT, NATIVE_Dump);
+    code_native_code_desc_t *data = (code_native_code_desc_t*)native_code;
     if (!bc_fname && !unopt_bc_fname && !obj_fname && !asm_fname) {
         LLVM_DEBUG(dbgs() << "No output requested, skipping native code dump?\n");
         delete data;
@@ -1639,17 +1647,17 @@ void language_dump_native_impl(void *native_code,
         CMModel = CodeModel::Medium; //  isn't good enough on x86 so use Medium, it has no cost because only the image goes in .ldata
     }
     std::unique_ptr<TargetMachine> SourceTM(
-        language_ExecutionEngine->getTarget().createTargetMachine(
+        code_ExecutionEngine->getTarget().createTargetMachine(
             TheTriple.getTriple(),
-            language_ExecutionEngine->getTargetCPU(),
-            language_ExecutionEngine->getTargetFeatureString(),
-            language_ExecutionEngine->getTargetOptions(),
+            code_ExecutionEngine->getTargetCPU(),
+            code_ExecutionEngine->getTargetFeatureString(),
+            code_ExecutionEngine->getTargetOptions(),
             RelocModel,
             CMModel,
             CodeGenOpt::Aggressive // -O3 TODO: respect command -O0 flag?
             ));
     fixupTM(*SourceTM);
-    auto DL = language_create_datalayout(*SourceTM);
+    auto DL = code_create_datalayout(*SourceTM);
     std::string StackProtectorGuard;
     unsigned OverrideStackAlignment;
     data->M.withModuleDo([&](Module &M) {
@@ -1665,9 +1673,9 @@ void language_dump_native_impl(void *native_code,
     SmallVector<AOTOutputs, 16> data_outputs;
     SmallVector<AOTOutputs, 16> metadata_outputs;
     if (z) {
-        LANGUAGE_TIMING(NATIVE_AOT, NATIVE_Sysimg);
+        CODE_TIMING(NATIVE_AOT, NATIVE_Sysimg);
         LLVMContext Context;
-        #if LANGUAGE_LLVM_VERSION < 170000
+        #if CODE_LLVM_VERSION < 170000
         SetOpaquePointer(Context);
         #endif
         Module sysimgM("sysimg", Context);
@@ -1679,9 +1687,9 @@ void language_dump_native_impl(void *native_code,
             ArrayRef<uint8_t>((const unsigned char*)z->buf, z->size));
         auto sysdata = new GlobalVariable(sysimgM, data->getType(), false,
                                      GlobalVariable::ExternalLinkage,
-                                     data, "language_system_image_data");
+                                     data, "code_system_image_data");
         sysdata->setAlignment(Align(64));
-#if LANGUAGE_LLVM_VERSION >= 180000
+#if CODE_LLVM_VERSION >= 180000
         sysdata->setCodeModel(CodeModel::Large);
 #else
         if (TheTriple.isX86() && TheTriple.isArch64Bit() && TheTriple.isOSLinux())
@@ -1691,7 +1699,7 @@ void language_dump_native_impl(void *native_code,
         Constant *len = ConstantInt::get(sysimgM.getDataLayout().getIntPtrType(Context), z->size);
         addComdat(new GlobalVariable(sysimgM, len->getType(), true,
                                      GlobalVariable::ExternalLinkage,
-                                     len, "language_system_image_size"), TheTriple);
+                                     len, "code_system_image_size"), TheTriple);
         // Free z here, since we've copied out everything into data
         // Results in serious memory savings
         ios_close(z);
@@ -1702,7 +1710,7 @@ void language_dump_native_impl(void *native_code,
         sysimg_outputs = compile(sysimgM, "sysimg", 1, [](Module &) {});
     }
 
-    bool imaging_mode = imaging_default() || language_options.outputo;
+    bool imaging_mode = imaging_default() || code_options.outputo;
 
     unsigned threads = 1;
     unsigned nfvars = 0;
@@ -1713,7 +1721,7 @@ void language_dump_native_impl(void *native_code,
     bool has_veccall = false;
 
     data->M.withModuleDo([&](Module &dataM) {
-        LANGUAGE_TIMING(NATIVE_AOT, NATIVE_Setup);
+        CODE_TIMING(NATIVE_AOT, NATIVE_Setup);
         dataM.setTargetTriple(TheTriple.str());
         dataM.setDataLayout(DL);
         dataM.setPICLevel(PICLevel::BigPIC);
@@ -1721,7 +1729,7 @@ void language_dump_native_impl(void *native_code,
 
         Type *T_psize = dataM.getDataLayout().getIntPtrType(Context)->getPointerTo();
 
-        // This should really be in language_create_native, but we haven't
+        // This should really be in code_create_native, but we haven't
         // yet set the target triple binary format correctly at that
         // point. This should be resolved when we start JITting for
         // COFF when we switch over to JITLink.
@@ -1732,7 +1740,7 @@ void language_dump_native_impl(void *native_code,
         }
 
         // Wipe the global initializers, we'll reset them at load time
-        for (auto gv : data->language_sysimg_gvars) {
+        for (auto gv : data->code_sysimg_gvars) {
             cast<GlobalVariable>(gv)->setInitializer(Constant::getNullValue(gv->getValueType()));
         }
 
@@ -1740,11 +1748,11 @@ void language_dump_native_impl(void *native_code,
         if (imaging_mode) {
             multiversioning_preannotate(dataM);
             {
-                DenseSet<GlobalValue *> fvars(data->language_sysimg_fvars.begin(), data->language_sysimg_fvars.end());
+                DenseSet<GlobalValue *> fvars(data->code_sysimg_fvars.begin(), data->code_sysimg_fvars.end());
                 for (auto &F : dataM) {
                     if (F.hasFnAttribute("julia.mv.reloc") || F.hasFnAttribute("julia.mv.fvar")) {
                         if (fvars.insert(&F).second) {
-                            data->language_sysimg_fvars.push_back(&F);
+                            data->code_sysimg_fvars.push_back(&F);
                         }
                     }
                 }
@@ -1762,36 +1770,37 @@ void language_dump_native_impl(void *native_code,
             );
             threads = compute_image_thread_count(module_info);
             LLVM_DEBUG(dbgs() << "Using " << threads << " to emit aot image\n");
-            nfvars = data->language_sysimg_fvars.size();
-            ngvars = data->language_sysimg_gvars.size();
-            emit_table(dataM, data->language_sysimg_gvars, "language_gvars", T_psize);
-            emit_table(dataM, data->language_sysimg_fvars, "language_fvars", T_psize);
+            nfvars = data->code_sysimg_fvars.size();
+            ngvars = data->code_sysimg_gvars.size();
+            emit_table(dataM, data->code_sysimg_gvars, "code_gvars", T_psize);
+            emit_table(dataM, data->code_sysimg_fvars, "code_fvars", T_psize);
             SmallVector<uint32_t, 0> idxs;
-            idxs.resize(data->language_sysimg_gvars.size());
+            idxs.resize(data->code_sysimg_gvars.size());
             std::iota(idxs.begin(), idxs.end(), 0);
             auto gidxs = ConstantDataArray::get(Context, idxs);
             auto gidxs_var = new GlobalVariable(dataM, gidxs->getType(), true,
                                                 GlobalVariable::ExternalLinkage,
-                                                gidxs, "language_gvar_idxs");
+                                                gidxs, "code_gvar_idxs");
             gidxs_var->setVisibility(GlobalValue::HiddenVisibility);
             gidxs_var->setDSOLocal(true);
             idxs.clear();
-            idxs.resize(data->language_sysimg_fvars.size());
+            idxs.resize(data->code_sysimg_fvars.size());
             std::iota(idxs.begin(), idxs.end(), 0);
             auto fidxs = ConstantDataArray::get(Context, idxs);
             auto fidxs_var = new GlobalVariable(dataM, fidxs->getType(), true,
                                                 GlobalVariable::ExternalLinkage,
-                                                fidxs, "language_fvar_idxs");
+                                                fidxs, "code_fvar_idxs");
             fidxs_var->setVisibility(GlobalValue::HiddenVisibility);
             fidxs_var->setDSOLocal(true);
             dataM.addModuleFlag(Module::Error, "julia.mv.suffix", MDString::get(Context, "_0"));
 
             // let the compiler know we are going to internalize a copy of this,
             // if it has a current usage with ExternalLinkage
-            auto language_small_typeof_copy = dataM.getGlobalVariable("language_small_typeof");
-            if (language_small_typeof_copy) {
-                language_small_typeof_copy->setVisibility(GlobalValue::HiddenVisibility);
-                language_small_typeof_copy->setDSOLocal(true);
+            auto code_small_typeof_copy = dataM.getGlobalVariable("code_small_typeof");
+            if (code_small_typeof_copy) {
+                code_small_typeof_copy->setVisibility(GlobalValue::HiddenVisibility);
+                code_small_typeof_copy->setDSOLocal(true);
+                code_small_typeof_copy->setDLLStorageClass(GlobalValue::DLLStorageClassTypes::DefaultStorageClass);
             }
         }
 
@@ -1811,9 +1820,9 @@ void language_dump_native_impl(void *native_code,
 
     if (params->emit_metadata)
     {
-        LANGUAGE_TIMING(NATIVE_AOT, NATIVE_Metadata);
+        CODE_TIMING(NATIVE_AOT, NATIVE_Metadata);
         LLVMContext Context;
-        #if LANGUAGE_LLVM_VERSION < 170000
+        #if CODE_LLVM_VERSION < 170000
         SetOpaquePointer(Context);
         #endif
         Module metadataM("metadata", Context);
@@ -1822,21 +1831,20 @@ void language_dump_native_impl(void *native_code,
         metadataM.setStackProtectorGuard(StackProtectorGuard);
         metadataM.setOverrideStackAlignment(OverrideStackAlignment);
 
-        // reflect the address of the language_RTLD_DEFAULT_handle variable
+        // reflect the address of the code_RTLD_DEFAULT_handle variable
         // back to the caller, so that we can check for consistency issues
-        GlobalValue *jlRTLD_DEFAULT_var = language_emit_RTLD_DEFAULT_var(&metadataM);
-        if (TheTriple.isOSBinFormatCOFF()) {
-            jlRTLD_DEFAULT_var->setDLLStorageClass(GlobalValue::DLLImportStorageClass);
-        }
-        addComdat(new GlobalVariable(metadataM,
-                                    jlRTLD_DEFAULT_var->getType(),
-                                    true,
-                                    GlobalVariable::ExternalLinkage,
-                                    jlRTLD_DEFAULT_var,
-                                    "language_RTLD_DEFAULT_handle_pointer"), TheTriple);
+        GlobalValue *codeRTLD_DEFAULT_var = code_emit_RTLD_DEFAULT_var(&metadataM);
 
         Type *T_size = DL.getIntPtrType(Context);
         Type *T_psize = T_size->getPointerTo();
+
+        auto FT = FunctionType::get(Type::getInt8Ty(Context)->getPointerTo()->getPointerTo(), {}, false);
+        auto F = Function::Create(FT, Function::ExternalLinkage, "get_code_RTLD_DEFAULT_handle_addr", metadataM);
+        llvm::IRBuilder<> builder(BasicBlock::Create(Context, "top", F));
+        builder.CreateRet(codeRTLD_DEFAULT_var);
+        F->setLinkage(GlobalValue::ExternalLinkage);
+        if (TheTriple.isOSBinFormatCOFF())
+            F->setDLLStorageClass(GlobalValue::DLLStorageClassTypes::DLLExportStorageClass);
 
         if (TheTriple.isOSWindows()) {
             // Windows expect that the function `_DllMainStartup` is present in an dll.
@@ -1852,8 +1860,8 @@ void language_dump_native_impl(void *native_code,
             builder.CreateRet(ConstantInt::get(T_int32, 1));
         }
         if (imaging_mode) {
-            auto specs = language_get_llvm_clone_targets();
-            const uint32_t base_flags = has_veccall ? LANGUAGE_TARGET_VEC_CALL : 0;
+            auto specs = code_get_llvm_clone_targets();
+            const uint32_t base_flags = has_veccall ? CODE_TARGET_VEC_CALL : 0;
             SmallVector<uint8_t, 0> data;
             auto push_i32 = [&] (uint32_t v) {
                 uint8_t buff[4];
@@ -1862,24 +1870,24 @@ void language_dump_native_impl(void *native_code,
             };
             push_i32(specs.size());
             for (uint32_t i = 0; i < specs.size(); i++) {
-                push_i32(base_flags | (specs[i].flags & LANGUAGE_TARGET_UNKNOWN_NAME));
+                push_i32(base_flags | (specs[i].flags & CODE_TARGET_UNKNOWN_NAME));
                 auto &specdata = specs[i].data;
                 data.insert(data.end(), specdata.begin(), specdata.end());
             }
             auto value = ConstantDataArray::get(Context, data);
             auto target_ids = new GlobalVariable(metadataM, value->getType(), true,
                                         GlobalVariable::InternalLinkage,
-                                        value, "language_dispatch_target_ids");
+                                        value, "code_dispatch_target_ids");
             auto shards = emit_shard_table(metadataM, T_size, T_psize, threads);
             auto ptls = emit_ptls_table(metadataM, T_size, T_psize);
             auto header = emit_image_header(metadataM, threads, nfvars, ngvars);
-            auto AT = ArrayType::get(T_size, sizeof(language_small_typeof) / sizeof(void*));
-            auto language_small_typeof_copy = new GlobalVariable(metadataM, AT, false,
+            auto AT = ArrayType::get(T_size, sizeof(code_small_typeof) / sizeof(void*));
+            auto code_small_typeof_copy = new GlobalVariable(metadataM, AT, false,
                                                         GlobalVariable::ExternalLinkage,
                                                         Constant::getNullValue(AT),
-                                                        "language_small_typeof");
-            language_small_typeof_copy->setVisibility(GlobalValue::HiddenVisibility);
-            language_small_typeof_copy->setDSOLocal(true);
+                                                        "code_small_typeof");
+            code_small_typeof_copy->setVisibility(GlobalValue::HiddenVisibility);
+            code_small_typeof_copy->setDSOLocal(true);
             AT = ArrayType::get(T_psize, 5);
             auto pointers = new GlobalVariable(metadataM, AT, false,
                                             GlobalVariable::ExternalLinkage,
@@ -1887,10 +1895,10 @@ void language_dump_native_impl(void *native_code,
                                                     ConstantExpr::getBitCast(header, T_psize),
                                                     ConstantExpr::getBitCast(shards, T_psize),
                                                     ConstantExpr::getBitCast(ptls, T_psize),
-                                                    ConstantExpr::getBitCast(language_small_typeof_copy, T_psize),
+                                                    ConstantExpr::getBitCast(code_small_typeof_copy, T_psize),
                                                     ConstantExpr::getBitCast(target_ids, T_psize)
                                             }),
-                                            "language_image_pointers");
+                                            "code_image_pointers");
             addComdat(pointers, TheTriple);
             if (s) {
                 write_int32(s, data.size());
@@ -1903,7 +1911,7 @@ void language_dump_native_impl(void *native_code,
     }
 
     {
-        LANGUAGE_TIMING(NATIVE_AOT, NATIVE_Write);
+        CODE_TIMING(NATIVE_AOT, NATIVE_Write);
 
         object::Archive::Kind Kind = getDefaultForHost(TheTriple);
 #define WRITE_ARCHIVE(fname, field, prefix, suffix) \
@@ -1941,108 +1949,73 @@ void addTargetPasses(legacy::PassManagerBase *PM, const Triple &triple, TargetIR
     PM->add(createTargetTransformInfoWrapperPass(std::move(analysis)));
 }
 
-// sometimes in GDB you want to find out what code was created from a mi
-extern "C" LANGUAGE_DLLEXPORT_CODEGEN language_code_info_t *language_gdbdumpcode(language_method_instance_t *mi)
+// sometimes in GDB you want to find out what code would be created from a mi
+extern "C" CODE_DLLEXPORT_CODEGEN code_code_info_t *code_gdbdumpcode(code_method_instance_t *mi)
 {
-    language_llvmf_dump_t llvmf_dump;
-    size_t world = language_current_task->world_age;
-    LANGUAGE_STREAM *stream = (LANGUAGE_STREAM*)STDERR_FILENO;
+    code_llvmf_dump_t llvmf_dump;
+    size_t world = code_current_task->world_age;
+    CODE_STREAM *stream = (CODE_STREAM*)STDERR_FILENO;
 
-    language_printf(stream, "---- dumping IR for ----\n");
-    language_static_show(stream, (language_value_t*)mi);
-    language_printf(stream, "\n----\n");
+    code_code_info_t *src = code_gdbcodetyped1(mi, world);
+    CODE_GC_PUSH1(&src);
 
-    language_printf(stream, "\n---- unoptimized IR ----");
-    language_get_llvmf_defn(&llvmf_dump, mi, world, 0, false, language_default_cgparams);
+    code_printf(stream, "---- dumping IR for ----\n");
+    code_static_show(stream, (code_value_t*)mi);
+    code_printf(stream, "\n----\n");
+
+    code_printf(stream, "\n---- unoptimized IR ----\n");
+    code_get_llvmf_defn(&llvmf_dump, mi, src, 0, false, code_default_cgparams);
     if (llvmf_dump.F) {
-        language_value_t *ir = language_dump_function_ir(&llvmf_dump, 0, 1, "source");
-        language_static_show(stream, ir);
+        code_value_t *ir = code_dump_function_ir(&llvmf_dump, 0, 1, "source");
+        if (ir != NULL && code_is_string(ir))
+            code_printf(stream, "%s", code_string_data(ir));
     }
-    language_printf(stream, "----\n");
+    code_printf(stream, "\n----\n");
 
-    language_printf(stream, "\n---- optimized IR ----");
-    language_get_llvmf_defn(&llvmf_dump, mi, world, 0, true, language_default_cgparams);
+    code_printf(stream, "\n---- optimized IR ----\n");
+    code_get_llvmf_defn(&llvmf_dump, mi, src, 0, true, code_default_cgparams);
     if (llvmf_dump.F) {
-        language_value_t *ir = language_dump_function_ir(&llvmf_dump, 0, 1, "source");
-        language_static_show(stream, ir);
+        code_value_t *ir = code_dump_function_ir(&llvmf_dump, 0, 1, "source");
+        if (ir != NULL && code_is_string(ir))
+            code_printf(stream, "%s", code_string_data(ir));
     }
-    language_printf(stream, "----\n");
+    code_printf(stream, "\n----\n");
 
-    language_printf(stream, "\n---- assembly ----");
-    language_get_llvmf_defn(&llvmf_dump, mi, world, 0, true, language_default_cgparams);
+    code_printf(stream, "\n---- assembly ----\n");
+    code_get_llvmf_defn(&llvmf_dump, mi, src, 0, true, code_default_cgparams);
     if (llvmf_dump.F) {
-        language_value_t *ir = language_dump_function_asm(&llvmf_dump, 0, "", "source", 0, true);
-        language_static_show(stream, ir);
+        code_value_t *ir = code_dump_function_asm(&llvmf_dump, 0, "", "source", 0, true);
+        if (ir != NULL && code_is_string(ir))
+            code_printf(stream, "%s", code_string_data(ir));
     }
-    language_printf(stream, "----\n");
+    code_printf(stream, "\n----\n");
+    CODE_GC_POP();
 
-    language_code_info_t *src = NULL;
-    language_value_t *ci = language_default_cgparams.lookup(mi, world, world);
-    if (ci == language_nothing) {
-        ci = (language_value_t*)language_type_infer(mi, world, 0, SOURCE_MODE_FORCE_SOURCE_UNCACHED);
-    } else {
-        ci = NULL;
-    }
-    if (ci) {
-        language_code_instance_t *codeinst = (language_code_instance_t*)ci;
-        src = (language_code_info_t*)language_atomic_load_relaxed(&codeinst->inferred);
-        if ((language_value_t*)src != language_nothing && !language_is_code_info(src) && language_is_method(mi->def.method)) {
-            LANGUAGE_GC_PUSH2(&codeinst, &src);
-            src = language_uncompress_ir(mi->def.method, codeinst, (language_value_t*)src);
-            LANGUAGE_GC_POP();
-        }
-    }
     return src;
 }
 
 // --- native code info, and dump function to IR and ASM ---
 // Get pointer to llvm::Function instance, compiling if necessary
-// for use in reflection from Julia.
-// This is paired with language_dump_function_ir, language_dump_function_asm, language_dump_method_asm in particular ways:
-// misuse will leak memory or cause read-after-free
-extern "C" LANGUAGE_DLLEXPORT_CODEGEN
-void language_get_llvmf_defn_impl(language_llvmf_dump_t* dump, language_method_instance_t *mi, size_t world, char getwrapper, char optimize, const language_cgparams_t params)
+// for use in reflection from Code.
+// This is paired with code_dump_function_ir and code_dump_function_asm, either of which will free all memory allocated here
+extern "C" CODE_DLLEXPORT_CODEGEN
+void code_get_llvmf_defn_impl(code_llvmf_dump_t* dump, code_method_instance_t *mi, code_code_info_t *src, char getwrapper, char optimize, const code_cgparams_t params)
 {
-    if (language_is_method(mi->def.method) && mi->def.method->source == NULL &&
-            mi->def.method->generator == NULL && !mi->def.method->is_for_opaque_closure) {
-        // not a generic function
-        dump->F = NULL;
-        return;
-    }
-
-    // get the source code for this function
-    language_code_info_t *src = NULL;
-    language_code_instance_t *codeinst = NULL;
-    LANGUAGE_GC_PUSH2(&src, &codeinst);
-    language_value_t *ci = params.lookup(mi, world, world);
-    if (ci && ci != language_nothing) {
-        codeinst = (language_code_instance_t*)ci;
-        src = (language_code_info_t*)language_atomic_load_relaxed(&codeinst->inferred);
-    }
-    if (!src || (language_value_t*)src == language_nothing) {
-        codeinst = language_type_infer(mi, world, 0, SOURCE_MODE_FORCE_SOURCE_UNCACHED);
-        if (codeinst) {
-            src = (language_code_info_t*)language_atomic_load_relaxed(&codeinst->inferred);
-        }
-    }
-    if (src) {
-        if ((language_value_t*)src != language_nothing && !language_is_code_info(src) && language_is_method(mi->def.method))
-            src = language_uncompress_ir(mi->def.method, codeinst, (language_value_t*)src);
-    }
-
     // emit this function into a new llvm module
-    if (codeinst && src && language_is_code_info(src)) {
-        auto ctx = language_ExecutionEngine->getContext();
-        orc::ThreadSafeModule m = language_create_ts_module(name_from_method_instance(mi), *ctx);
+    dump->F = nullptr;
+    dump->TSM = nullptr;
+    if (src && code_is_code_info(src)) {
+        auto ctx = code_ExecutionEngine->getContext();
+        orc::ThreadSafeModule m = code_create_ts_module(name_from_method_instance(mi), *ctx);
         uint64_t compiler_start_time = 0;
-        uint8_t measure_compile_time_enabled = language_atomic_load_relaxed(&language_measure_compile_time_enabled);
+        uint8_t measure_compile_time_enabled = code_atomic_load_relaxed(&code_measure_compile_time_enabled);
         if (measure_compile_time_enabled)
-            compiler_start_time = language_hrtime();
-        LANGUAGE_LOCK(&language_codegen_lock);
+            compiler_start_time = code_hrtime();
+        CODE_LOCK(&code_codegen_lock);
         auto target_info = m.withModuleDo([&](Module &M) {
             return std::make_pair(M.getDataLayout(), Triple(M.getTargetTriple()));
         });
-        language_codegen_params_t output(*ctx, std::move(target_info.first), std::move(target_info.second));
+        code_codegen_params_t output(*ctx, std::move(target_info.first), std::move(target_info.second));
         output.params = &params;
         output.imaging_mode = imaging_default();
         // This would be nice, but currently it causes some assembly regressions that make printed output
@@ -2052,20 +2025,20 @@ void language_get_llvmf_defn_impl(language_llvmf_dump_t* dump, language_method_i
         // This would also be nice, but it seems to cause OOMs on the windows32 builder
         // To get correct names in the IR this needs to be at least 2
         output.debug_level = params.debug_info_level;
-        auto decls = language_emit_code(m, mi, src, codeinst->rettype, output, language_atomic_load_relaxed(&codeinst->min_world),  language_atomic_load_relaxed(&codeinst->max_world));
-        LANGUAGE_UNLOCK(&language_codegen_lock); // Might GC
+        auto decls = code_emit_code(m, mi, src, output);
+        CODE_UNLOCK(&code_codegen_lock); // Might GC
 
         Function *F = NULL;
         if (m) {
             // if compilation succeeded, prepare to return the result
-            // Similar to language_link_global from jitlayers.cpp,
+            // Similar to code_link_global from jitlayers.cpp,
             // so that code_llvm shows similar codegen to the jit
             for (auto &global : output.global_targets) {
-                if (language_options.image_codegen) {
+                if (code_options.image_codegen) {
                     global.second->setLinkage(GlobalValue::ExternalLinkage);
                 } else {
                     auto p = literal_static_pointer_val(global.first, global.second->getValueType());
-                    #if LANGUAGE_LLVM_VERSION >= 170000
+                    #if CODE_LLVM_VERSION >= 170000
                     Type *elty = PointerType::get(output.getContext(), 0);
                     #else
                     Type *elty;
@@ -2084,18 +2057,18 @@ void language_get_llvmf_defn_impl(language_llvmf_dump_t* dump, language_method_i
                     global.second->setVisibility(GlobalValue::DefaultVisibility);
                 }
             }
-            if (!language_options.image_codegen) {
+            if (!code_options.image_codegen) {
                 optimizeDLSyms(*m.getModuleUnlocked());
             }
             assert(!verifyLLVMIR(*m.getModuleUnlocked()));
             if (optimize) {
-                NewPM PM{language_ExecutionEngine->cloneTargetMachine(), getOptLevel(language_options.opt_level)};
+                NewPM PM{code_ExecutionEngine->cloneTargetMachine(), getOptLevel(code_options.opt_level)};
                 //Safe b/c context lock is held by output
                 PM.run(*m.getModuleUnlocked());
                 assert(!verifyLLVMIR(*m.getModuleUnlocked()));
             }
             const std::string *fname;
-            if (decls.functionObject == "language_fptr_args" || decls.functionObject == "language_fptr_sparam")
+            if (decls.functionObject == "code_fptr_args" || decls.functionObject == "code_fptr_sparam")
                 getwrapper = false;
             if (!getwrapper)
                 fname = &decls.specFunctionObject;
@@ -2103,10 +2076,9 @@ void language_get_llvmf_defn_impl(language_llvmf_dump_t* dump, language_method_i
                 fname = &decls.functionObject;
             F = cast<Function>(m.getModuleUnlocked()->getNamedValue(*fname));
         }
-        LANGUAGE_GC_POP();
         if (measure_compile_time_enabled) {
-            auto end = language_hrtime();
-            language_atomic_fetch_add_relaxed(&language_cumulative_compile_time, end - compiler_start_time);
+            auto end = code_hrtime();
+            code_atomic_fetch_add_relaxed(&code_cumulative_compile_time, end - compiler_start_time);
         }
         if (F) {
             dump->TSM = wrap(new orc::ThreadSafeModule(std::move(m)));
@@ -2114,7 +2086,4 @@ void language_get_llvmf_defn_impl(language_llvmf_dump_t* dump, language_method_i
             return;
         }
     }
-
-    const char *mname = name_from_method_instance(mi);
-    language_errorf("unable to compile source for function %s", mname);
 }
