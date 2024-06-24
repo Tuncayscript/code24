@@ -1,18 +1,24 @@
 /*
- * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
+ * Copyright (c) 2024, NeXTech Corporation. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
-  *
+ *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * version 2 for more details (a copy is included in the LICENSE file that
  * accompanied this code).
  *
- * Contact with ITGSS, 651 N Broad St, Suite 201, in the
- * city of Middletown, zip code 19709, and county of New Castle, state of Delaware.
+ * Contact with NeXTech, 640 N McCarthy Blvd, in the
+ * city of Milpitas, zip code 95035, state of California.
  * or visit www.it-gss.com if you need additional information or have any
  * questions.
+ *
  */
+
+// About:
+// Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
+// Date: Wednesday, May 19, 2024
+// Technology: C/C++20 - ISO/IEC 14882:2020(E) 
 
 #include <string>
 #include <fstream>
@@ -24,7 +30,7 @@
 #include <llvm/ADT/StringMap.h>
 #include <llvm/Support/raw_ostream.h>
 
-#include "code.h"
+#include "language.h"
 #include "language_internal.h"
 
 using namespace llvm;
@@ -91,11 +97,10 @@ LANGUAGE_DLLEXPORT uint64_t *language_malloc_data_pointer(StringRef filename, in
     return allocLine(mallocData[filename], line);
 }
 
-// Resets the malloc counts.
-extern "C" LANGUAGE_DLLEXPORT void language_clear_malloc_data(void)
+static void clear_log_data(logdata_t &logData, int resetValue)
 {
-    logdata_t::iterator it = mallocData.begin();
-    for (; it != mallocData.end(); it++) {
+    logdata_t::iterator it = logData.begin();
+    for (; it != logData.end(); it++) {
         SmallVector<logdata_block*, 0> &bytes = (*it).second;
         SmallVector<logdata_block*, 0>::iterator itb;
         for (itb = bytes.begin(); itb != bytes.end(); itb++) {
@@ -103,7 +108,7 @@ extern "C" LANGUAGE_DLLEXPORT void language_clear_malloc_data(void)
                 logdata_block &data = **itb;
                 for (int i = 0; i < logdata_blocksize; i++) {
                     if (data[i] > 0)
-                        data[i] = 1;
+                        data[i] = resetValue;
                 }
             }
         }
@@ -111,10 +116,22 @@ extern "C" LANGUAGE_DLLEXPORT void language_clear_malloc_data(void)
     language_gc_sync_total_bytes(0);
 }
 
+// Resets the malloc counts.
+extern "C" LANGUAGE_DLLEXPORT void language_clear_malloc_data(void)
+{
+    clear_log_data(mallocData, 1);
+}
+
+// Resets the code coverage
+extern "C" LANGUAGE_DLLEXPORT void language_clear_coverage_data(void)
+{
+    clear_log_data(coverageData, 0);
+}
+
 static void write_log_data(logdata_t &logData, const char *extension)
 {
     std::string base = std::string(language_options.language_bindir);
-    base = base + "/../share/julia/base/";
+    base = base + "/../share/language/base/";
     logdata_t::iterator it = logData.begin();
     for (; it != logData.end(); it++) {
         std::string filename(it->first());
@@ -170,7 +187,7 @@ static void write_lcov_data(logdata_t &logData, const std::string &outfile)
 {
     std::ofstream outf(outfile.c_str(), std::ofstream::ate | std::ofstream::out | std::ofstream::binary);
     //std::string base = std::string(language_options.language_bindir);
-    //base = base + "/../share/julia/base/";
+    //base = base + "/../share/language/base/";
     logdata_t::iterator it = logData.begin();
     for (; it != logData.end(); it++) {
         StringRef filename = it->first();
