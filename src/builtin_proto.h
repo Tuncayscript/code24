@@ -1,21 +1,28 @@
 /*
- * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
+ * Copyright (c) 2024, NeXTech Corporation. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
-  *
+ *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * version 2 for more details (a copy is included in the LICENSE file that
  * accompanied this code).
  *
- * Contact with ITGSS, 651 N Broad St, Suite 201, in the
- * city of Middletown, zip code 19709, and county of New Castle, state of Delaware.
+ * Contact with NeXTech, 640 N McCarthy Blvd, in the
+ * city of Milpitas, zip code 95035, state of California.
  * or visit www.it-gss.com if you need additional information or have any
  * questions.
+ *
  */
 
-#ifndef LANGUAGE_BUILTIN_PROTO_H
-#define LANGUAGE_BUILTIN_PROTO_H
+// About:
+// Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
+//             Tural Ghuliev  (turalquliyev@it-gss.com)
+// Date: Saturday, June 1, 2024
+// Technology: C++20 - ISO/IEC 14882:2020(E) 
+
+#ifndef CODE_BUILTIN_PROTO_H
+#define CODE_BUILTIN_PROTO_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,14 +32,14 @@ extern "C" {
 
 #ifdef DEFINE_BUILTIN_GLOBALS
 #define DECLARE_BUILTIN(name) \
-    LANGUAGE_CALLABLE(language_f_##name); \
-    LANGUAGE_DLLEXPORT language_value_t *language_builtin_##name; \
-    LANGUAGE_DLLEXPORT language_fptr_args_t language_f_##name##_addr = &language_f_##name
+    CODE_CALLABLE(jl_f_##name); \
+    CODE_DLLEXPORT jl_value_t *jl_builtin_##name; \
+    CODE_DLLEXPORT jl_fptr_args_t jl_f_##name##_addr = &jl_f_##name
 #else
 #define DECLARE_BUILTIN(name) \
-    LANGUAGE_CALLABLE(language_f_##name); \
-    LANGUAGE_DLLEXPORT extern language_value_t *language_builtin_##name; \
-    LANGUAGE_DLLEXPORT extern language_fptr_args_t language_f_##name##_addr
+    CODE_CALLABLE(jl_f_##name); \
+    CODE_DLLEXPORT extern jl_value_t *jl_builtin_##name; \
+    CODE_DLLEXPORT extern jl_fptr_args_t jl_f_##name##_addr
 #endif
 
 DECLARE_BUILTIN(_apply_iterate);
@@ -87,15 +94,14 @@ DECLARE_BUILTIN(tuple);
 DECLARE_BUILTIN(typeassert);
 DECLARE_BUILTIN(typeof);
 
-LANGUAGE_CALLABLE(language_f__structtype);
-LANGUAGE_CALLABLE(language_f__abstracttype);
-LANGUAGE_CALLABLE(language_f__primitivetype);
-LANGUAGE_CALLABLE(language_f__setsuper);
-LANGUAGE_CALLABLE(language_f__equiv_typedef);
-LANGUAGE_CALLABLE(language_f_get_binding_type);
-LANGUAGE_CALLABLE(language_f_set_binding_type);
-LANGUAGE_CALLABLE(language_f__compute_sparams);
-LANGUAGE_CALLABLE(language_f__svec_ref);
+CODE_CALLABLE(jl_f__structtype);
+CODE_CALLABLE(jl_f__abstracttype);
+CODE_CALLABLE(jl_f__primitivetype);
+CODE_CALLABLE(jl_f__setsuper);
+CODE_CALLABLE(jl_f__equiv_typedef);
+CODE_CALLABLE(jl_f_get_binding_type);
+CODE_CALLABLE(jl_f__compute_sparams);
+CODE_CALLABLE(jl_f__svec_ref);
 #ifdef __cplusplus
 }
 #endif
