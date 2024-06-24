@@ -26,9 +26,9 @@ default: $(CODE_BUILD_MODE) # contains either "debug" or "release"
 all: debug release
 
 # sort is used to remove potential duplicates
-DIRS := $(sort $(build_bindir) $(build_depsbindir) $(build_libdir) $(build_private_libdir) $(build_libexecdir) $(build_includedir) $(build_includedir)/code $(build_sysconfdir)/code $(build_datarootdir)/code $(build_datarootdir)/code/stdlib $(build_man1dir))
+DIRS := $(sort $(build_bindir) $(build_depsbindir) $(build_libdir) $(build_private_libdir) $(build_libexecdir) $(build_includedir) $(build_includedir)/code $(build_sysconfdir)/code $(build_datarootdir)/code $(build_datarootdir)/code/runtime $(build_man1dir))
 ifneq ($(BUILDROOT),$(CODEHOME))
-BUILDDIRS := $(BUILDROOT) $(addprefix $(BUILDROOT)/,base src src/flisp src/support src/clangsa cli doc deps stdlib test test/clangsa test/embedding test/gcext test/llvmpasses)
+BUILDDIRS := $(BUILDROOT) $(addprefix $(BUILDROOT)/,base src src/flisp src/support src/clangsa cli doc deps runtime test test/clangsa test/embedding test/gcext test/llvmpasses)
 BUILDDIRMAKE := $(addsuffix /Makefile,$(BUILDDIRS)) $(BUILDROOT)/sysimage.mk $(BUILDROOT)/pkgimage.mk
 DIRS += $(BUILDDIRS)
 $(BUILDDIRMAKE): | $(BUILDDIRS)
@@ -78,9 +78,9 @@ endif
 code-deps: | $(DIRS) $(build_datarootdir)/code/base $(build_datarootdir)/code/test
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/deps
 
-# `code-stdlib` depends on `code-deps` so that the fake CODEL stdlibs can copy in their Artifacts.toml files.
-code-stdlib: | $(DIRS) code-deps
-	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/stdlib
+# `code-runtime` depends on `code-deps` so that the fake CODEL runtimes can copy in their Artifacts.toml files.
+code-runtime: | $(DIRS) code-deps
+	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/runtime
 
 code-base: code-deps $(build_sysconfdir)/code/startup.code $(build_man1dir)/code.1 $(build_datarootdir)/code/code-config.code
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/base
@@ -103,10 +103,10 @@ code-src-release code-src-debug : code-src-% : code-deps code_flisp.boot.inc.pho
 code-cli-release code-cli-debug: code-cli-% : code-deps
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/cli $*
 
-code-sysimg-ji : code-stdlib code-base code-cli-$(CODE_BUILD_MODE) code-src-$(CODE_BUILD_MODE) | $(build_private_libdir)
+code-sysimg-ji : code-runtime code-base code-cli-$(CODE_BUILD_MODE) code-src-$(CODE_BUILD_MODE) | $(build_private_libdir)
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT) -f sysimage.mk sysimg-ji CODE_EXECUTABLE='$(CODE_EXECUTABLE)'
 
-code-sysimg-bc : code-stdlib code-base code-cli-$(CODE_BUILD_MODE) code-src-$(CODE_BUILD_MODE) | $(build_private_libdir)
+code-sysimg-bc : code-runtime code-base code-cli-$(CODE_BUILD_MODE) code-src-$(CODE_BUILD_MODE) | $(build_private_libdir)
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT) -f sysimage.mk sysimg-bc CODE_EXECUTABLE='$(CODE_EXECUTABLE)'
 
 code-sysimg-release code-sysimg-debug : code-sysimg-% : code-sysimg-ji code-src-%
@@ -115,12 +115,12 @@ code-sysimg-release code-sysimg-debug : code-sysimg-% : code-sysimg-ji code-src-
 code-debug code-release : code-% : code-sysimg-% code-src-% code-symlink code-libccalltest \
                                       code-libccalllazyfoo code-libccalllazybar code-libllvmcalltest code-base-cache
 
-stdlibs-cache-release stdlibs-cache-debug : stdlibs-cache-% : code-%
+runtimes-cache-release runtimes-cache-debug : runtimes-cache-% : code-%
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT) -f pkgimage.mk $*
 
-debug release : % : code-% stdlibs-cache-%
+debug release : % : code-% runtimes-cache-%
 
-docs: code-sysimg-$(CODE_BUILD_MODE) stdlibs-cache-$(CODE_BUILD_MODE)
+docs: code-sysimg-$(CODE_BUILD_MODE) runtimes-cache-$(CODE_BUILD_MODE)
 	@$(MAKE) $(QUIET_MAKE) -C $(BUILDROOT)/doc CODE_EXECUTABLE='$(call spawn,$(CODE_EXECUTABLE_$(CODE_BUILD_MODE))) --startup-file=no'
 
 docs-revise:
@@ -283,7 +283,7 @@ endef
 
 install: $(build_depsbindir)/stringreplace $(BUILDROOT)/doc/_build/html/en/index.html
 	@$(MAKE) $(QUIET_MAKE) $(CODE_BUILD_MODE)
-	@for subdir in $(bindir) $(datarootdir)/code/stdlib/$(VERSDIR) $(docdir) $(man1dir) $(includedir)/code $(libdir) $(private_libdir) $(sysconfdir) $(private_libexecdir); do \
+	@for subdir in $(bindir) $(datarootdir)/code/runtime/$(VERSDIR) $(docdir) $(man1dir) $(includedir)/code $(libdir) $(private_libdir) $(sysconfdir) $(private_libexecdir); do \
 		mkdir -p $(DESTDIR)$$subdir; \
 	done
 
@@ -391,10 +391,10 @@ endif
 	-rm -f $(DESTDIR)$(datarootdir)/code/base/*/build-configured
 	-rm -f $(DESTDIR)$(datarootdir)/code/base/*/build-compiled
 	-rm -f $(DESTDIR)$(datarootdir)/code/base/*/build-checked
-	-rm -f $(DESTDIR)$(datarootdir)/code/stdlib/$(VERSDIR)/*/source-extracted
-	-rm -f $(DESTDIR)$(datarootdir)/code/stdlib/$(VERSDIR)/*/build-configured
-	-rm -f $(DESTDIR)$(datarootdir)/code/stdlib/$(VERSDIR)/*/build-compiled
-	-rm -f $(DESTDIR)$(datarootdir)/code/stdlib/$(VERSDIR)/*/build-checked
+	-rm -f $(DESTDIR)$(datarootdir)/code/runtime/$(VERSDIR)/*/source-extracted
+	-rm -f $(DESTDIR)$(datarootdir)/code/runtime/$(VERSDIR)/*/build-configured
+	-rm -f $(DESTDIR)$(datarootdir)/code/runtime/$(VERSDIR)/*/build-compiled
+	-rm -f $(DESTDIR)$(datarootdir)/code/runtime/$(VERSDIR)/*/build-checked
 	# Copy in beautiful new man page
 	$(INSTALL_F) $(build_man1dir)/code.1 $(DESTDIR)$(man1dir)/
 	# Copy .desktop file
@@ -548,10 +548,10 @@ endif
 	# Create file light-source-dist.tmp to hold all the filenames that go into the tarball
 	echo "base/version_git.code" > light-source-dist.tmp
 
-	# Download all stdlibs and include the tarball filenames in light-source-dist.tmp
-	@$(MAKE) -C stdlib getall DEPS_GIT=0 USE_BINARYBUILDER=0
-	-ls stdlib/srccache/*.tar.gz >> light-source-dist.tmp
-	-ls stdlib/*/StdlibArtifacts.toml >> light-source-dist.tmp
+	# Download all runtimes and include the tarball filenames in light-source-dist.tmp
+	@$(MAKE) -C runtime getall DEPS_GIT=0 USE_BINARYBUILDER=0
+	-ls runtime/srccache/*.tar.gz >> light-source-dist.tmp
+	-ls runtime/*/runtimeArtifacts.toml >> light-source-dist.tmp
 
 	# Include all git-tracked filenames
 	git ls-files >> light-source-dist.tmp
@@ -559,7 +559,7 @@ endif
 	# Include documentation filenames
 	find doc/_build/html >> light-source-dist.tmp
 
-# Make tarball with only NeXTCode code + stdlib tarballs
+# Make tarball with only NeXTCode code + runtime tarballs
 light-source-dist: light-source-dist.tmp
 	# Prefix everything with "code-$(commit-sha)/" or "code-$(version)/" and then create tarball
 	# To achieve prefixing, we temporarily create a symlink in the source directory that points back
@@ -595,7 +595,7 @@ clean: | $(CLEAN_TARGETS)
 	@-$(MAKE) -C $(BUILDROOT)/src clean
 	@-$(MAKE) -C $(BUILDROOT)/cli clean
 	@-$(MAKE) -C $(BUILDROOT)/test clean
-	@-$(MAKE) -C $(BUILDROOT)/stdlib clean
+	@-$(MAKE) -C $(BUILDROOT)/runtime clean
 	@-$(MAKE) -C $(BUILDROOT) -f pkgimage.mk clean
 	-rm -f $(BUILDROOT)/code
 	-rm -f $(BUILDROOT)/*.tar.gz
@@ -612,13 +612,13 @@ cleanall: clean
 	-rm -fr $(build_prefix) $(build_staging)
 
 distcleanall: cleanall
-	@-$(MAKE) -C $(BUILDROOT)/stdlib distclean
+	@-$(MAKE) -C $(BUILDROOT)/runtime distclean
 	@-$(MAKE) -C $(BUILDROOT)/deps distcleanall
 	@-$(MAKE) -C $(BUILDROOT)/doc cleanall
 
 .FORCE:
 .PHONY: .FORCE default debug release check-whitespace release-candidate \
-	code-debug code-release code-stdlib code-deps code-deps-libs \
+	code-debug code-release code-runtime code-deps code-deps-libs \
 	code-cli-release code-cli-debug code-src-release code-src-debug \
 	code-symlink code-base code-sysimg code-sysimg-ji code-sysimg-release code-sysimg-debug \
 	test testall testall1 test \
