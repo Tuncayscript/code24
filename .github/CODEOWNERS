@@ -1,13 +1,13 @@
-## CODEOWNERS for NeXTech-oss/nextcode
+# Pattern: /path/to/file pattern @username
+# Assign ownership to specific users or teams
 
-This file defines ownership of code in the NeXTech-oss/nextcode repository.
-
-**General ownership:**
-
-* All files: `/` @NeXTech-oss
-
-**Specific ownership:**
-
-* Compiler directory: `/compiler/*` @nextech-compiler
-* Core library directory: `/core/*` @nextech-core
-* Language server directory: `/language-server/*` @nextech-language-server
+/src/* @Tuncayscript
+/cli/* @Tuncayscript
+/contrib/* @Tuncayscript
+/doc/* @Tuncayscript
+/etc/* @Tuncayscript
+/include/* @Tuncayscript
+/runtime/* @Tuncayscript
+/test/* @Tuncayscript
+/toolchain/* @Tuncayscript
+/tools/* @Tuncayscript
