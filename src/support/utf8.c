@@ -19,7 +19,7 @@
 // Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
 //             Tural Ghuliev  (turalquliyev@it-gss.com)
 // Date: Monday, June 24, 2024
-// Technology: C++20 - ISO/IEC 14882:2020(E) 
+// Technology: C/C++20 - ISO/IEC 14882:2020(E) 
 // Purpose: Built-in UTF-8 Capabalities
 
 #include <stdlib.h>
