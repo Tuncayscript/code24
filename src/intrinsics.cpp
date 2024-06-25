@@ -1,18 +1,4 @@
-/*
- * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
- * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
-  *
- * This code is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
- * version 2 for more details (a copy is included in the LICENSE file that
- * accompanied this code).
- *
- * Contact with ITGSS, 651 N Broad St, Suite 201, in the
- * city of Middletown, zip code 19709, and county of New Castle, state of Delaware.
- * or visit www.it-gss.com if you need additional information or have any
- * questions.
- */
+
 
 namespace LANGUAGE_I {
 #include "intrinsics.h"
@@ -55,18 +41,18 @@ STATISTIC(EmittedUntypedIntrinsics, "Number of untyped intrinsics emitted");
 
 using namespace LANGUAGE_I;
 
-FunctionType *get_intr_args1(LLVMContext &C) { return FunctionType::get(JuliaType::get_prjlvalue_ty(C), {JuliaType::get_prjlvalue_ty(C)}, false); }
-FunctionType *get_intr_args2(LLVMContext &C) { return FunctionType::get(JuliaType::get_prjlvalue_ty(C), {JuliaType::get_prjlvalue_ty(C), JuliaType::get_prjlvalue_ty(C)}, false); }
-FunctionType *get_intr_args3(LLVMContext &C) { return FunctionType::get(JuliaType::get_prjlvalue_ty(C), {JuliaType::get_prjlvalue_ty(C), JuliaType::get_prjlvalue_ty(C), JuliaType::get_prjlvalue_ty(C)}, false); }
-FunctionType *get_intr_args4(LLVMContext &C) { return FunctionType::get(JuliaType::get_prjlvalue_ty(C), {JuliaType::get_prjlvalue_ty(C), JuliaType::get_prjlvalue_ty(C), JuliaType::get_prjlvalue_ty(C), JuliaType::get_prjlvalue_ty(C)}, false); }
-FunctionType *get_intr_args5(LLVMContext &C) { return FunctionType::get(JuliaType::get_prjlvalue_ty(C), {JuliaType::get_prjlvalue_ty(C), JuliaType::get_prjlvalue_ty(C), JuliaType::get_prjlvalue_ty(C), JuliaType::get_prjlvalue_ty(C), JuliaType::get_prjlvalue_ty(C)}, false); }
+FunctionType *get_intr_args1(LLVMContext &C) { return FunctionType::get(JuliaType::get_prlanguagevalue_ty(C), {JuliaType::get_prlanguagevalue_ty(C)}, false); }
+FunctionType *get_intr_args2(LLVMContext &C) { return FunctionType::get(JuliaType::get_prlanguagevalue_ty(C), {JuliaType::get_prlanguagevalue_ty(C), JuliaType::get_prlanguagevalue_ty(C)}, false); }
+FunctionType *get_intr_args3(LLVMContext &C) { return FunctionType::get(JuliaType::get_prlanguagevalue_ty(C), {JuliaType::get_prlanguagevalue_ty(C), JuliaType::get_prlanguagevalue_ty(C), JuliaType::get_prlanguagevalue_ty(C)}, false); }
+FunctionType *get_intr_args4(LLVMContext &C) { return FunctionType::get(JuliaType::get_prlanguagevalue_ty(C), {JuliaType::get_prlanguagevalue_ty(C), JuliaType::get_prlanguagevalue_ty(C), JuliaType::get_prlanguagevalue_ty(C), JuliaType::get_prlanguagevalue_ty(C)}, false); }
+FunctionType *get_intr_args5(LLVMContext &C) { return FunctionType::get(JuliaType::get_prlanguagevalue_ty(C), {JuliaType::get_prlanguagevalue_ty(C), JuliaType::get_prlanguagevalue_ty(C), JuliaType::get_prlanguagevalue_ty(C), JuliaType::get_prlanguagevalue_ty(C), JuliaType::get_prlanguagevalue_ty(C)}, false); }
 
 const auto &runtime_func() {
     static struct runtime_funcs_t {
         std::array<JuliaFunction<> *, num_intrinsics> runtime_func;
         runtime_funcs_t() :
         runtime_func{
-#define ADD_I(name, nargs) new JuliaFunction<>{XSTR(code_##name), get_intr_args##nargs, nullptr},
+#define ADD_I(name, nargs) new JuliaFunction<>{XSTR(language_##name), get_intr_args##nargs, nullptr},
 #define ADD_HIDDEN ADD_I
 #define ALIAS(alias, base) nullptr,
     INTRINSICS
@@ -417,26 +403,23 @@ static Value *emit_unboxed_coercion(language_codectx_t &ctx, Type *to, Value *un
         CreateTrap(ctx.builder);
         return UndefValue::get(to);
     }
-    if (frompointer && topointer) {
-        unboxed = emit_bitcast(ctx, unboxed, to);
-    }
     else if (!ty->isIntOrPtrTy() && !ty->isFloatingPointTy()) {
         assert(DL.getTypeSizeInBits(ty) == DL.getTypeSizeInBits(to));
         AllocaInst *cast = ctx.builder.CreateAlloca(ty);
         setName(ctx.emission_context, cast, "coercion");
         ctx.builder.CreateStore(unboxed, cast);
-        unboxed = ctx.builder.CreateLoad(to, ctx.builder.CreateBitCast(cast, to->getPointerTo()));
+        unboxed = ctx.builder.CreateLoad(to, cast);
     }
     else if (frompointer) {
         Type *INTT_to = INTT(to, DL);
         unboxed = ctx.builder.CreatePtrToInt(unboxed, INTT_to);
         setName(ctx.emission_context, unboxed, "coercion");
-        if (INTT_to != to)
+        if (INTT_to != to) //TODO when is this true?
             unboxed = ctx.builder.CreateBitCast(unboxed, to);
     }
     else if (topointer) {
         Type *INTT_to = INTT(to, DL);
-        if (to != INTT_to)
+        if (to != INTT_to) //TODO when is this true?
             unboxed = ctx.builder.CreateBitCast(unboxed, INTT_to);
         unboxed = emit_inttoptr(ctx, unboxed, to);
         setName(ctx.emission_context, unboxed, "coercion");
@@ -474,7 +457,7 @@ static Value *emit_unbox(language_codectx_t &ctx, Type *to, const language_cgval
 
     if (jt == (language_value_t*)language_bool_type || to->isIntegerTy(1)) {
         language_aliasinfo_t ai = language_aliasinfo_t::fromTBAA(ctx, x.tbaa);
-        Instruction *unbox_load = ai.decorateInst(ctx.builder.CreateLoad(getInt8Ty(ctx.builder.getContext()), maybe_bitcast(ctx, p, getInt8PtrTy(ctx.builder.getContext()))));
+        Instruction *unbox_load = ai.decorateInst(ctx.builder.CreateLoad(getInt8Ty(ctx.builder.getContext()), p));
         setName(ctx.emission_context, unbox_load, p->getName() + ".unbox");
         if (jt == (language_value_t*)language_bool_type)
             unbox_load->setMetadata(LLVMContext::MD_range, MDNode::get(ctx.builder.getContext(), {
@@ -508,7 +491,6 @@ static Value *emit_unbox(language_codectx_t &ctx, Type *to, const language_cgval
             return emit_unboxed_coercion(ctx, to, ai.decorateInst(load));
         }
     }
-    p = maybe_bitcast(ctx, p, ptype);
     Instruction *load = ctx.builder.CreateAlignedLoad(to, p, Align(alignment));
     setName(ctx.emission_context, load, p->getName() + ".unbox");
     language_aliasinfo_t ai = language_aliasinfo_t::fromTBAA(ctx, x.tbaa);
@@ -528,9 +510,6 @@ static void emit_unbox_store(language_codectx_t &ctx, const language_cgval_t &x,
     if (!x.ispointer()) { // already unboxed, but sometimes need conversion (e.g. f32 -> i32)
         assert(x.V);
         Value *unboxed = zext_struct(ctx, x.V);
-        Type *dest_ty = unboxed->getType()->getPointerTo();
-        if (dest->getType() != dest_ty)
-            dest = emit_bitcast(ctx, dest, dest_ty);
         StoreInst *store = ctx.builder.CreateAlignedStore(unboxed, dest, Align(alignment));
         store->setVolatile(isVolatile);
         language_aliasinfo_t ai = language_aliasinfo_t::fromTBAA(ctx, tbaa_dest);
@@ -631,8 +610,7 @@ static language_cgval_t generic_bitcast(language_codectx_t &ctx, ArrayRef<langua
         language_aliasinfo_t ai = language_aliasinfo_t::fromTBAA(ctx, v.tbaa);
         vx = ai.decorateInst(ctx.builder.CreateLoad(
             storage_type,
-            emit_bitcast(ctx, data_pointer(ctx, v),
-                storage_type->getPointerTo())));
+            data_pointer(ctx, v)));
         setName(ctx.emission_context, vx, "bitcast");
     }
 
@@ -652,9 +630,17 @@ static language_cgval_t generic_bitcast(language_codectx_t &ctx, ArrayRef<langua
             if (isa<Instruction>(vx) && !vx->hasName())
                 // emit_inttoptr may undo an PtrToInt
                 setName(ctx.emission_context, vx, "bitcast_coercion");
+        } else if (vxt->isPointerTy() && llvmt->isPointerTy()) {
+            // emit_bitcast preserves the origin address space, which we can't have here
+            vx = ctx.builder.CreateAddrSpaceCast(vx, llvmt);
+            if (isa<Instruction>(vx) && !vx->hasName())
+                // cast may have been folded
+                setName(ctx.emission_context, vx, "bitcast_coercion");
         } else {
             vx = emit_bitcast(ctx, vx, llvmt);
-            setName(ctx.emission_context, vx, "bitcast_coercion");
+            if (isa<Instruction>(vx) && !vx->hasName())
+                // emit_bitcast may undo another bitcast
+                setName(ctx.emission_context, vx, "bitcast_coercion");
         }
     }
 
@@ -679,11 +665,11 @@ static language_cgval_t generic_cast(
     auto &DL = ctx.emission_context.DL;
     const language_cgval_t &targ = argv[0];
     const language_cgval_t &v = argv[1];
-    language_datatype_t *jlto = staticeval_bitstype(targ);
-    if (!jlto || !language_is_primitivetype(v.typ))
+    language_datatype_t *languageto = staticeval_bitstype(targ);
+    if (!languageto || !language_is_primitivetype(v.typ))
         return emit_runtime_call(ctx, f, argv, 2);
-    uint32_t nb = language_datatype_size(jlto);
-    Type *to = bitstype_to_llvm((language_value_t*)jlto, ctx.builder.getContext(), true);
+    uint32_t nb = language_datatype_size(languageto);
+    Type *to = bitstype_to_llvm((language_value_t*)languageto, ctx.builder.getContext(), true);
     Type *vt = bitstype_to_llvm(v.typ, ctx.builder.getContext(), true);
     if (toint)
         to = INTT(to, DL);
@@ -706,18 +692,18 @@ static language_cgval_t generic_cast(
             // understood that everything is implicitly rounded to 23 bits,
             // but if we start looking at more bits we need to actually do the
             // rounding first instead of carrying around incorrect low bits.
-            Value *jlfloattemp_var = emit_static_alloca(ctx, from->getType());
-            setName(ctx.emission_context, jlfloattemp_var, "rounding_slot");
-            ctx.builder.CreateStore(from, jlfloattemp_var);
-            from  = ctx.builder.CreateLoad(from->getType(), jlfloattemp_var, /*force this to load from the stack*/true);
+            Value *languagefloattemp_var = emit_static_alloca(ctx, from->getType());
+            setName(ctx.emission_context, languagefloattemp_var, "rounding_slot");
+            ctx.builder.CreateStore(from, languagefloattemp_var);
+            from  = ctx.builder.CreateLoad(from->getType(), languagefloattemp_var, /*force this to load from the stack*/true);
             setName(ctx.emission_context, from, "rounded");
         }
     }
     Value *ans = ctx.builder.CreateCast(Op, from, to);
     if (f == fptosi || f == fptoui)
         ans = ctx.builder.CreateFreeze(ans);
-    if (language_is_concrete_type((language_value_t*)jlto)) {
-        return mark_language_type(ctx, ans, false, jlto);
+    if (language_is_concrete_type((language_value_t*)languageto)) {
+        return mark_language_type(ctx, ans, false, languageto);
     }
     else {
         Value *targ_rt = boxed(ctx, targ);
@@ -726,7 +712,7 @@ static language_cgval_t generic_cast(
         Value *box = emit_allocobj(ctx, nb, targ_rt, true, align);
         setName(ctx.emission_context, box, "cast_box");
         init_bits_value(ctx, box, ans, ctx.tbaa().tbaa_immut);
-        return mark_language_type(ctx, box, true, jlto->name->wrapper);
+        return mark_language_type(ctx, box, true, languageto->name->wrapper);
     }
 }
 
@@ -763,10 +749,10 @@ static language_cgval_t emit_pointerref(language_codectx_t &ctx, ArrayRef<langua
     setName(ctx.emission_context, im1, "pointerref_idx");
 
     if (ety == (language_value_t*)language_any_type) {
-        Value *thePtr = emit_unbox(ctx, ctx.types().T_pprjlvalue, e, e.typ);
+        Value *thePtr = emit_unbox(ctx, ctx.types().T_pprlanguagevalue, e, e.typ);
         if (isa<Instruction>(thePtr) && !thePtr->hasName())
             setName(ctx.emission_context, thePtr, "unbox_any_ptr");
-        LoadInst *load = ctx.builder.CreateAlignedLoad(ctx.types().T_prjlvalue, ctx.builder.CreateInBoundsGEP(ctx.types().T_prjlvalue, thePtr, im1), Align(align_nb));
+        LoadInst *load = ctx.builder.CreateAlignedLoad(ctx.types().T_prlanguagevalue, ctx.builder.CreateInBoundsGEP(ctx.types().T_prlanguagevalue, thePtr, im1), Align(align_nb));
         setName(ctx.emission_context, load, "any_unbox");
         language_aliasinfo_t ai = language_aliasinfo_t::fromTBAA(ctx, ctx.tbaa().tbaa_data);
         ai.decorateInst(load);
@@ -780,8 +766,8 @@ static language_cgval_t emit_pointerref(language_codectx_t &ctx, ArrayRef<langua
         im1 = ctx.builder.CreateMul(im1, ConstantInt::get(ctx.types().T_size,
                     LLT_ALIGN(size, language_datatype_align(ety))));
         setName(ctx.emission_context, im1, "pointerref_offset");
-        Value *thePtr = emit_unbox(ctx, getInt8PtrTy(ctx.builder.getContext()), e, e.typ);
-        thePtr = ctx.builder.CreateInBoundsGEP(getInt8Ty(ctx.builder.getContext()), emit_bitcast(ctx, thePtr, getInt8PtrTy(ctx.builder.getContext())), im1);
+        Value *thePtr = emit_unbox(ctx, getPointerTy(ctx.builder.getContext()), e, e.typ);
+        thePtr = ctx.builder.CreateInBoundsGEP(getInt8Ty(ctx.builder.getContext()), thePtr, im1);
         setName(ctx.emission_context, thePtr, "pointerref_src");
         MDNode *tbaa = best_tbaa(ctx.tbaa(), ety);
         emit_memcpy(ctx, strct, language_aliasinfo_t::fromTBAA(ctx, tbaa), thePtr, language_aliasinfo_t::fromTBAA(ctx, nullptr), size, sizeof(language_value_t*), align_nb);
@@ -854,7 +840,7 @@ static language_cgval_t emit_pointerset(language_codectx_t &ctx, ArrayRef<langua
         ai.decorateInst(store);
     }
     else if (x.ispointer()) {
-        thePtr = emit_unbox(ctx, getInt8PtrTy(ctx.builder.getContext()), e, e.typ);
+        thePtr = emit_unbox(ctx, getPointerTy(ctx.builder.getContext()), e, e.typ);
         uint64_t size = language_datatype_size(ety);
         im1 = ctx.builder.CreateMul(im1, ConstantInt::get(ctx.types().T_size,
                     LLT_ALIGN(size, language_datatype_align(ety))));
@@ -939,8 +925,8 @@ static language_cgval_t emit_atomic_pointerref(language_codectx_t &ctx, ArrayRef
     AtomicOrdering llvm_order = get_llvm_atomic_order(order);
 
     if (ety == (language_value_t*)language_any_type) {
-        Value *thePtr = emit_unbox(ctx, ctx.types().T_pprjlvalue, e, e.typ);
-        LoadInst *load = ctx.builder.CreateAlignedLoad(ctx.types().T_prjlvalue, thePtr, Align(sizeof(language_value_t*)));
+        Value *thePtr = emit_unbox(ctx, ctx.types().T_pprlanguagevalue, e, e.typ);
+        LoadInst *load = ctx.builder.CreateAlignedLoad(ctx.types().T_prlanguagevalue, thePtr, Align(sizeof(language_value_t*)));
         setName(ctx.emission_context, load, "atomic_pointerref");
         language_aliasinfo_t ai = language_aliasinfo_t::fromTBAA(ctx, ctx.tbaa().tbaa_data);
         ai.decorateInst(load);
@@ -963,16 +949,15 @@ static language_cgval_t emit_atomic_pointerref(language_codectx_t &ctx, ArrayRef
         assert(language_is_datatype(ety));
         Value *strct = emit_allocobj(ctx, (language_datatype_t*)ety, true);
         setName(ctx.emission_context, strct, "atomic_pointerref_box");
-        Value *thePtr = emit_unbox(ctx, getInt8PtrTy(ctx.builder.getContext()), e, e.typ);
+        Value *thePtr = emit_unbox(ctx, getPointerTy(ctx.builder.getContext()), e, e.typ);
         Type *loadT = Type::getIntNTy(ctx.builder.getContext(), nb * 8);
-        thePtr = emit_bitcast(ctx, thePtr, loadT->getPointerTo());
         MDNode *tbaa = best_tbaa(ctx.tbaa(), ety);
         LoadInst *load = ctx.builder.CreateAlignedLoad(loadT, thePtr, Align(nb));
         setName(ctx.emission_context, load, "atomic_pointerref");
         language_aliasinfo_t ai = language_aliasinfo_t::fromTBAA(ctx, tbaa);
         ai.decorateInst(load);
         load->setOrdering(llvm_order);
-        thePtr = emit_bitcast(ctx, strct, thePtr->getType());
+        thePtr = strct;
         StoreInst *store = ctx.builder.CreateAlignedStore(load, thePtr, Align(language_alignment(ety)));
         ai.decorateInst(store);
         return mark_language_type(ctx, strct, true, ety);
@@ -1034,7 +1019,7 @@ static language_cgval_t emit_atomic_pointerop(language_codectx_t &ctx, intrinsic
     if (ety == (language_value_t*)language_any_type) {
         // unsafe_store to Ptr{Any} is allowed to implicitly drop GC roots.
         // n.b.: the expected value (y) must be rooted, but not the others
-        Value *thePtr = emit_unbox(ctx, ctx.types().T_pprjlvalue, e, e.typ);
+        Value *thePtr = emit_unbox(ctx, ctx.types().T_pprlanguagevalue, e, e.typ);
         bool isboxed = true;
         language_cgval_t ret = typed_store(ctx, thePtr, x, y, ety, ctx.tbaa().tbaa_data, nullptr, nullptr, isboxed,
                     llvm_order, llvm_failorder, sizeof(language_value_t*), nullptr, issetfield, isreplacefield, isswapfield, ismodifyfield, false, false, modifyop, "atomic_pointermodify", nullptr, nullptr);
@@ -1062,7 +1047,7 @@ static language_cgval_t emit_atomic_pointerop(language_codectx_t &ctx, intrinsic
 
     if (!language_isbits(ety)) {
         //if (!deserves_stack(ety))
-        //Value *thePtr = emit_unbox(ctx, getInt8PtrTy(ctx.builder.getContext()), e, e.typ);
+        //Value *thePtr = emit_unbox(ctx, getPointerTy(ctx.builder.getContext()), e, e.typ);
         //uint64_t size = language_datatype_size(ety);
         return emit_runtime_call(ctx, f, argv, nargs); // TODO: optimizations
     }
@@ -1145,7 +1130,15 @@ static language_cgval_t emit_ifelse(language_codectx_t &ctx, language_cgval_t c,
     Value *isfalse = emit_condition(ctx, c, "ifelse");
     setName(ctx.emission_context, isfalse, "ifelse_cond");
     language_value_t *t1 = x.typ;
-    language_value_t *t2 = y.typ;
+    language_value_t *t2 = y.typ;o rt_hint. Check first if either
+        // of the types have empty intersection with the result type,
+        // in which case, we may use the other one.
+        if (language_type_intersection(t1, rt_hint) == language_bottom_type)
+            return y;
+        else if (language_type_intersection(t2, rt_hint) == language_bottom_type)
+            return x;
+        // if they aren't the same type, consider using the expr type
+        // to instantiate a union-split o
     // handle cases where the condition is irrelevant based on type info
     if (t1 == language_bottom_type && t2 == language_bottom_type)
         return language_cgval_t(); // undefined
@@ -1156,15 +1149,7 @@ static language_cgval_t emit_ifelse(language_codectx_t &ctx, language_cgval_t c,
 
     if (t1 != t2) {
         // type inference may know something we don't, in which case it may
-        // be illegal for us to convert to rt_hint. Check first if either
-        // of the types have empty intersection with the result type,
-        // in which case, we may use the other one.
-        if (language_type_intersection(t1, rt_hint) == language_bottom_type)
-            return y;
-        else if (language_type_intersection(t2, rt_hint) == language_bottom_type)
-            return x;
-        // if they aren't the same type, consider using the expr type
-        // to instantiate a union-split optimization
+        // be illegal for us to convert tptimization
         x = convert_language_type(ctx, x, rt_hint);
         y = convert_language_type(ctx, y, rt_hint);
         t1 = x.typ;
@@ -1173,7 +1158,7 @@ static language_cgval_t emit_ifelse(language_codectx_t &ctx, language_cgval_t c,
 
     Value *ifelse_result;
     bool isboxed = t1 != t2 || !deserves_stack(t1);
-    Type *llt1 = isboxed ? ctx.types().T_prjlvalue : language_type_to_llvm(ctx, t1);
+    Type *llt1 = isboxed ? ctx.types().T_prlanguagevalue : language_type_to_llvm(ctx, t1);
     if (!isboxed) {
         if (type_is_ghost(llt1))
             return x;
@@ -1213,8 +1198,6 @@ static language_cgval_t emit_ifelse(language_codectx_t &ctx, language_cgval_t c,
             else {
                 x_ptr = decay_derived(ctx, x_ptr);
                 y_ptr = decay_derived(ctx, y_ptr);
-                if (x_ptr->getType() != y_ptr->getType())
-                    y_ptr = ctx.builder.CreateBitCast(y_ptr, x_ptr->getType());
                 ifelse_result = ctx.builder.CreateSelect(isfalse, y_ptr, x_ptr);
                 setName(ctx.emission_context, ifelse_result, "ifelse_result");
                 ifelse_tbaa = MDNode::getMostGenericTBAA(x.tbaa, y.tbaa);
@@ -1271,7 +1254,7 @@ static language_cgval_t emit_ifelse(language_codectx_t &ctx, language_cgval_t c,
                     y_vboxed = ConstantPointerNull::get(cast<PointerType>(x_vboxed->getType()));
                 ret.Vboxed = ctx.builder.CreateSelect(isfalse, y_vboxed, x_vboxed);
                 setName(ctx.emission_context, ret.Vboxed, "ifelse_vboxed");
-                assert(ret.Vboxed->getType() == ctx.types().T_prjlvalue);
+                assert(ret.Vboxed->getType() == ctx.types().T_prlanguagevalue);
             }
             return ret;
         }
@@ -1405,7 +1388,7 @@ static language_cgval_t emit_intrinsic(language_codectx_t &ctx, intrinsic f, lan
         language_datatype_t *dt = (language_datatype_t*) x.constant;
 
         // select the appropriated overloaded intrinsic
-        std::string intr_name = "julia.cpu.have_fma.";
+        std::string intr_name = "language.cpu.have_fma.";
         if (dt == language_float32_type)
             intr_name += "f32";
         else if (dt == language_float64_type)
