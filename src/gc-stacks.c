@@ -1,18 +1,24 @@
 /*
- * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
+ * Copyright (c) 2024, NeXTech Corporation. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
-  *
+ *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * version 2 for more details (a copy is included in the LICENSE file that
  * accompanied this code).
  *
- * Contact with ITGSS, 651 N Broad St, Suite 201, in the
- * city of Middletown, zip code 19709, and county of New Castle, state of Delaware.
+ * Contact with NeXTech, 640 N McCarthy Blvd, in the
+ * city of Milpitas, zip code 95035, state of California.
  * or visit www.it-gss.com if you need additional information or have any
  * questions.
+ *
  */
+
+// About:
+// Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
+// Date: Sunday, May 19, 2024
+// Technology: C/C++20 - ISO/IEC 14882:2020(E) 
 
 #include "gc.h"
 #ifndef _OS_WINDOWS_
@@ -36,28 +42,47 @@
 // number of stacks to always keep available per pool
 #define MIN_STACK_MAPPINGS_PER_POOL 5
 
+#if defined(_OS_WINDOWS_) || (!defined(_OS_OPENBSD_) && !defined(LANGUAGE_HAVE_UCONTEXT) && !defined(LANGUAGE_HAVE_SIGALTSTACK))
+#define LANGUAGE_USE_GUARD_PAGE   1
 const size_t language_guard_size = (4096 * 8);
+#else
+const size_t language_guard_size = 0;
+#endif
+
 static _Atomic(uint32_t) num_stack_mappings = 0;
 
 #ifdef _OS_WINDOWS_
 #define MAP_FAILED NULL
 static void *malloc_stack(size_t bufsz) LANGUAGE_NOTSAFEPOINT
 {
+    size_t guard_size = LLT_ALIGN(language_guard_size, language_page_size);
+    bufsz += guard_size;
+
     void *stk = VirtualAlloc(NULL, bufsz, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     if (stk == NULL)
         return MAP_FAILED;
+
+    // set up a guard page to detect stack overflow
     DWORD dwOldProtect;
     if (!VirtualProtect(stk, language_guard_size, PAGE_READWRITE | PAGE_GUARD, &dwOldProtect)) {
         VirtualFree(stk, 0, MEM_RELEASE);
         return MAP_FAILED;
     }
+    stk = (char *)stk + guard_size;
+
     language_atomic_fetch_add_relaxed(&num_stack_mappings, 1);
     return stk;
 }
 
 
-static void free_stack(void *stkbuf, size_t bufsz)
+static void free_stack(void *stkbuf, size_t bufsz) LANGUAGE_NOTSAFEPOINT
 {
+#ifdef LANGUAGE_USE_GUARD_PAGE
+    size_t guard_size = LLT_ALIGN(language_guard_size, language_page_size);
+    bufsz += guard_size;
+    stkbuf = (char *)stkbuf - guard_size;
+#endif
+
     VirtualFree(stkbuf, 0, MEM_RELEASE);
     language_atomic_fetch_add_relaxed(&num_stack_mappings, -1);
 }
@@ -70,35 +95,56 @@ static void *malloc_stack(size_t bufsz) LANGUAGE_NOTSAFEPOINT
     void* stk = mmap(0, bufsz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
     if (stk == MAP_FAILED)
         return MAP_FAILED;
-    language_atomic_fetch_add(&num_stack_mappings, 1);
+
+    // we don't set up a guard page to detect stack overflow: on OpenBSD, any
+    // mmap-ed region has guard page managed by the kernel, so there is no
+    // need for it. Additionally, a memory region used as stack (memory
+    // allocated with MAP_STACK option) has strict permission, and you can't
+    // "create" a guard page on such memory by using `mprotect` on it
+
+    language_atomic_fetch_add_relaxed(&num_stack_mappings, 1);
     return stk;
 }
 # else
 static void *malloc_stack(size_t bufsz) LANGUAGE_NOTSAFEPOINT
 {
+#ifdef LANGUAGE_USE_GUARD_PAGE
+    size_t guard_size = LLT_ALIGN(language_guard_size, language_page_size);
+    bufsz += guard_size;
+#endif
+
     void* stk = mmap(0, bufsz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (stk == MAP_FAILED)
         return MAP_FAILED;
-#if !defined(LANGUAGE_HAVE_UCONTEXT) && !defined(LANGUAGE_HAVE_SIGALTSTACK)
-    // setup a guard page to detect stack overflow
+
+#ifdef LANGUAGE_USE_GUARD_PAGE
+    // set up a guard page to detect stack overflow
     if (mprotect(stk, language_guard_size, PROT_NONE) == -1) {
         munmap(stk, bufsz);
         return MAP_FAILED;
     }
+    stk = (char *)stk + guard_size;
 #endif
+
     language_atomic_fetch_add_relaxed(&num_stack_mappings, 1);
     return stk;
 }
 # endif
 
-static void free_stack(void *stkbuf, size_t bufsz)
+static void free_stack(void *stkbuf, size_t bufsz) LANGUAGE_NOTSAFEPOINT
 {
+#ifdef LANGUAGE_USE_GUARD_PAGE
+    size_t guard_size = LLT_ALIGN(language_guard_size, language_page_size);
+    bufsz += guard_size;
+    stkbuf = (char *)stkbuf - guard_size;
+#endif
+
     munmap(stkbuf, bufsz);
     language_atomic_fetch_add_relaxed(&num_stack_mappings, -1);
 }
 #endif
 
-LANGUAGE_DLLEXPORT uint32_t language_get_num_stack_mappings(void)
+LANGUAGE_DLLEXPORT uint32_t language_get_num_stack_mappings(void) LANGUAGE_NOTSAFEPOINT
 {
     return language_atomic_load_relaxed(&num_stack_mappings);
 }
@@ -133,7 +179,7 @@ static unsigned select_pool(size_t nb) LANGUAGE_NOTSAFEPOINT
 }
 
 
-static void _language_free_stack(language_ptls_t ptls, void *stkbuf, size_t bufsz)
+static void _language_free_stack(language_ptls_t ptls, void *stkbuf, size_t bufsz) LANGUAGE_NOTSAFEPOINT
 {
 #ifdef _COMPILER_ASAN_ENABLED_
     __asan_unpoison_stack_memory((uintptr_t)stkbuf, bufsz);
@@ -212,7 +258,7 @@ LANGUAGE_DLLEXPORT void *language_malloc_stack(size_t *bufsz, language_task_t *o
     return stk;
 }
 
-void sweep_stack_pools(void)
+void sweep_stack_pools(void) LANGUAGE_NOTSAFEPOINT
 {
     // Stack sweeping algorithm:
     //    // deallocate stacks if we have too many sitting around unused
