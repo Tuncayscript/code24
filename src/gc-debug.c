@@ -1,18 +1,4 @@
-/*
- * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
- * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
-  *
- * This code is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
- * version 2 for more details (a copy is included in the LICENSE file that
- * accompanied this code).
- *
- * Contact with ITGSS, 651 N Broad St, Suite 201, in the
- * city of Middletown, zip code 19709, and county of New Castle, state of Delaware.
- * or visit www.it-gss.com if you need additional information or have any
- * questions.
- */
+// This file is a part of Julia. License is MIT: https://languagelang.org/license
 
 #include "gc.h"
 #include "code.h"
@@ -274,9 +260,9 @@ void gc_verify(language_ptls_t ptls)
         language_taggedvalue_t *v = (language_taggedvalue_t*)bits_save[i >= clean_len ? GC_OLD : GC_CLEAN].items[i >= clean_len ? i - clean_len : i];
         if (gc_marked(v->bits.gc)) {
             language_safe_printf("Error. Early free of %p type :", v);
-            code_(language_typeof(language_valueof(v)));
+            language_(language_typeof(language_valueof(v)));
             language_safe_printf("val : ");
-            code_(language_valueof(v));
+            language_(language_valueof(v));
             language_safe_printf("Let's try to backtrack the missing write barrier :\n");
             lostval = language_valueof(v);
             break;
@@ -406,7 +392,7 @@ void gc_verify_tags(void)
         }
     }
 
-    // verify that all the objects on every page are either valid julia objects
+    // verify that all the objects on every page are either valid language objects
     // or are part of the freelist or are on the allocated half of a page
     gc_verify_tags_pagestack();
 }
