@@ -16,7 +16,9 @@
  */
 
 // About:
-// Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
+// Author(-s): Tunjay Akbarli  (tunjayakbarli@it-gss.com)
+//             Tural Ghuliev   (turalquliyev@it-gss.com)
+//             Teymur Novruzov (teymurnovruzov@it-gss.com) 
 // Date: Sunday, May 19, 2024
 // Technology: C/C++20 - ISO/IEC 14882:2020(E) 
 // Purpose: Interpreting System
