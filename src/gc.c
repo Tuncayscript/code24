@@ -1,18 +1,4 @@
-/*
- * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
- * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
-  *
- * This code is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
- * version 2 for more details (a copy is included in the LICENSE file that
- * accompanied this code).
- *
- * Contact with ITGSS, 651 N Broad St, Suite 201, in the
- * city of Middletown, zip code 19709, and county of New Castle, state of Delaware.
- * or visit www.it-gss.com if you need additional information or have any
- * questions.
- */
+// This file is a part of Julia. License is MIT: https://julialang.org/license
 
 #include "gc.h"
 #include "gc-page-profiler.h"
@@ -317,7 +303,7 @@ static void run_finalizer(language_task_t *ct, void *o, void *ff)
         language_printf((LANGUAGE_STREAM*)STDERR_FILENO, "error in running finalizer: ");
         language_static_show((LANGUAGE_STREAM*)STDERR_FILENO, language_current_exception(ct));
         language_printf((LANGUAGE_STREAM*)STDERR_FILENO, "\n");
-        jlbacktrace(); // written to STDERR_FILENO
+        languagebacktrace(); // written to STDERR_FILENO
     }
 }
 
@@ -458,7 +444,7 @@ LANGUAGE_DLLEXPORT void language_gc_run_pending_finalizers(language_task_t *ct)
     if (ct == NULL)
         ct = language_current_task;
     language_ptls_t ptls = ct->ptls;
-    if (!ptls->in_finalizer && ptls->locks.len == 0 && ptls->finalizers_inhibited == 0) {
+    if (!ptls->in_finalizer && ptls->locks.len == 0 && ptls->finalizers_inhibited == 0 && ptls->engine_nqueued == 0) {
         run_finalizers(ct, 0);
     }
 }
@@ -503,7 +489,7 @@ LANGUAGE_DLLEXPORT void language_gc_enable_finalizers(language_task_t *ct, int o
             static int backtrace_printed = 0;
             if (backtrace_printed == 0) {
                 backtrace_printed = 1;
-                jlbacktrace(); // written to STDERR_FILENO
+                languagebacktrace(); // written to STDERR_FILENO
             }
         }
         return;
@@ -634,7 +620,7 @@ LANGUAGE_DLLEXPORT void language_finalize_th(language_task_t *ct, language_value
 }
 
 // explicitly scheduled objects for the sweepfunc callback
-static void gc_sweep_foreign_objs_in_list(arraylist_t *objs)
+static void gc_sweep_foreign_objs_in_list(arraylist_t *objs) LANGUAGE_NOTSAFEPOINT
 {
     size_t p = 0;
     for (size_t i = 0; i < objs->len; i++) {
@@ -652,7 +638,7 @@ static void gc_sweep_foreign_objs_in_list(arraylist_t *objs)
     objs->len = p;
 }
 
-static void gc_sweep_foreign_objs(void)
+static void gc_sweep_foreign_objs(void) LANGUAGE_NOTSAFEPOINT
 {
     assert(gc_n_threads);
     for (int i = 0; i < gc_n_threads; i++) {
@@ -1446,7 +1432,8 @@ STATIC_INLINE void gc_dump_page_utilization_data(void) LANGUAGE_NOTSAFEPOINT
 
 int64_t buffered_pages = 0;
 
-// Returns pointer to terminal pointer of list rooted at *pfl.
+// Walks over a page, reconstruting the free lists if the page contains at least one live object. If not,
+// queues up the page for later decommit (i.e. through `madvise` on Unix).
 static void gc_sweep_page(gc_page_profiler_serializer_t *s, language_gc_pool_t *p, language_gc_page_stack_t *allocd, language_gc_page_stack_t *buffered,
                           language_gc_pagemeta_t *pg, int osize) LANGUAGE_NOTSAFEPOINT
 {
@@ -1597,8 +1584,11 @@ STATIC_INLINE void gc_sweep_pool_page(gc_page_profiler_serializer_t *s, language
 // sweep over all memory that is being used and not in a pool
 static void gc_sweep_other(language_ptls_t ptls, int sweep_full) LANGUAGE_NOTSAFEPOINT
 {
+    sweep_stack_pools();
+    gc_sweep_foreign_objs();
     sweep_malloced_memory();
     sweep_big(ptls, sweep_full);
+    language_engine_sweep(gc_all_tls_states);
 }
 
 static void gc_pool_sync_nfree(language_gc_pagemeta_t *pg, language_taggedvalue_t *last) LANGUAGE_NOTSAFEPOINT
@@ -1931,9 +1921,7 @@ LANGUAGE_DLLEXPORT void language_gc_queue_root(const language_value_t *ptr)
     // We need to ensure that objects are in the remset at
     // most once, since the mark phase may update page metadata,
     // which is not idempotent. See comments in https://github.com/JuliaLang/julia/issues/50419
-    uintptr_t header = language_atomic_load_relaxed((_Atomic(uintptr_t) *)&o->header);
-    header &= ~GC_OLD; // clear the age bit
-    header = language_atomic_exchange_relaxed((_Atomic(uintptr_t) *)&o->header, header);
+    uintptr_t header = language_atomic_fetch_and_relaxed((_Atomic(uintptr_t) *)&o->header, ~GC_OLD);
     if (header & GC_OLD) { // write barrier has not been triggered in this object yet
         arraylist_push(ptls->heap.remset, (language_value_t*)ptr);
         ptls->heap.remset_nptr++; // conservative
@@ -2022,10 +2010,10 @@ STATIC_INLINE void gc_assert_parent_validity(language_value_t *parent, language_
         language_gc_debug_print_status();
         language_safe_printf("Parent %p\n", (void *)parent);
         language_safe_printf("of type:\n");
-        code_(language_typeof(parent));
+        language_(language_typeof(parent));
         language_safe_printf("While marking child at %p\n", (void *)child);
         language_safe_printf("of type:\n");
-        code_(child_vtag);
+        language_(child_vtag);
         language_gc_debug_critical_error();
         abort();
     }
@@ -2102,7 +2090,7 @@ LANGUAGE_NORETURN NOINLINE void gc_dump_queue_and_abort(language_ptls_t ptls, la
 {
     language_safe_printf("GC error (probable corruption)\n");
     language_gc_debug_print_status();
-    code_(vt);
+    language_(vt);
     language_gc_debug_critical_error();
     if (language_n_gcthreads == 0) {
         language_safe_printf("\n");
@@ -2111,7 +2099,7 @@ LANGUAGE_NORETURN NOINLINE void gc_dump_queue_and_abort(language_ptls_t ptls, la
         language_safe_printf("thread %d ptr queue:\n", ptls->tid);
         language_safe_printf("~~~~~~~~~~ ptr queue top ~~~~~~~~~~\n");
         while ((new_obj = gc_ptr_queue_steal_from(mq)) != NULL) {
-            code_(new_obj);
+            language_(new_obj);
             language_safe_printf("==========\n");
         }
         language_safe_printf("~~~~~~~~~~ ptr queue bottom ~~~~~~~~~~\n");
@@ -2572,9 +2560,9 @@ STATIC_INLINE void gc_mark_excstack(language_ptls_t ptls, language_excstack_t *e
                 continue;
             // Found an extended backtrace entry: iterate over any
             // GC-managed values inside.
-            size_t njlvals = language_bt_num_jlvals(bt_entry);
-            for (size_t jlval_index = 0; jlval_index < njlvals; jlval_index++) {
-                new_obj = language_bt_entry_jlvalue(bt_entry, jlval_index);
+            size_t nlanguagevals = language_bt_num_languagevals(bt_entry);
+            for (size_t languageval_index = 0; languageval_index < nlanguagevals; languageval_index++) {
+                new_obj = language_bt_entry_languagevalue(bt_entry, languageval_index);
                 gc_try_claim_and_push(mq, new_obj, NULL);
                 gc_heap_snapshot_record_frame_to_object_edge(bt_entry, new_obj);
             }
@@ -3276,9 +3264,9 @@ static void gc_queue_bt_buf(language_gc_markqueue_t *mq, language_ptls_t ptls2)
         language_bt_element_t *bt_entry = bt_data + i;
         if (language_bt_is_native(bt_entry))
             continue;
-        size_t njlvals = language_bt_num_jlvals(bt_entry);
-        for (size_t j = 0; j < njlvals; j++)
-            gc_try_claim_and_push(mq, language_bt_entry_jlvalue(bt_entry, j), NULL);
+        size_t nlanguagevals = language_bt_num_languagevals(bt_entry);
+        for (size_t j = 0; j < nlanguagevals; j++)
+            gc_try_claim_and_push(mq, language_bt_entry_languagevalue(bt_entry, j), NULL);
     }
 }
 
@@ -3418,7 +3406,7 @@ LANGUAGE_DLLEXPORT void language_gc_get_total_bytes(int64_t *bytes) LANGUAGE_NOT
 {
     language_gc_num_t num = gc_num;
     combine_thread_gc_counts(&num, 0);
-    // Sync this logic with `base/util.jl:GC_Diff`
+    // Sync this logic with `base/util.language:GC_Diff`
     *bytes = (num.total_allocd + num.deferred_alloc + num.allocd);
 }
 
@@ -3677,8 +3665,6 @@ static int _language_gc_collect(language_ptls_t ptls, language_gc_collection_t c
 #endif
         current_sweep_full = sweep_full;
         sweep_weak_refs();
-        sweep_stack_pools();
-        gc_sweep_foreign_objs();
         gc_sweep_other(ptls, sweep_full);
         gc_scrub();
         gc_verify_tags();
@@ -3968,7 +3954,7 @@ LANGUAGE_DLLEXPORT void language_gc_collect(language_gc_collection_t collection)
     // Only disable finalizers on current thread
     // Doing this on all threads is racy (it's impossible to check
     // or wait for finalizers on other threads without dead lock).
-    if (!ptls->finalizers_inhibited && ptls->locks.len == 0) {
+    if (!ptls->finalizers_inhibited && ptls->locks.len == 0 && ptls->engine_nqueued == 0) {
         LANGUAGE_TIMING(GC, GC_Finalizers);
         run_finalizers(ct, 0);
     }
