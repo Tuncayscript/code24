@@ -1,27 +1,32 @@
 /*
- * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
+ * Copyright (c) 2024, NeXTech Corporation. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
-  *
+ *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * version 2 for more details (a copy is included in the LICENSE file that
  * accompanied this code).
  *
- * Contact with ITGSS, 651 N Broad St, Suite 201, in the
- * city of Middletown, zip code 19709, and county of New Castle, state of Delaware.
+ * Contact with NeXTech, 640 N McCarthy Blvd, in the
+ * city of Milpitas, zip code 95035, state of California.
  * or visit www.it-gss.com if you need additional information or have any
  * questions.
+ *
  */
 
-/*
-  Generic Functions
-  . method table and lookup
-  . GF constructor
-  . dispatch
-  . static parameter inference
-  . method specialization and caching, invoking type inference
-*/
+// About:
+// Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
+// Date: Tuesday, June 25, 2024
+// Technology: C/C++20 - ISO/IEC 14882:2020(E) 
+// Purpose: Generic Functions
+//          Method table and lookup
+//          GF constructor
+//          Dispatch
+//          Static Parameter Inference (SPI)
+//          Method Specialization and Catching
+//          Invoking type inference
+
 #include <stdlib.h>
 #include <string.h>
 #include "code.h"
@@ -111,7 +116,7 @@ void language_call_tracer(tracer_cb callback, language_value_t *tracee)
         language_printf((LANGUAGE_STREAM*)STDERR_FILENO, "WARNING: tracer callback function threw an error:\n");
         language_static_show((LANGUAGE_STREAM*)STDERR_FILENO, language_current_exception(ct));
         language_printf((LANGUAGE_STREAM*)STDERR_FILENO, "\n");
-        jlbacktrace(); // written to STDERR_FILENO
+        languagebacktrace(); // written to STDERR_FILENO
     }
 }
 
@@ -127,7 +132,7 @@ static int8_t language_cachearg_offset(language_methtable_t *mt)
 
 static uint_t speccache_hash(size_t idx, language_value_t *data)
 {
-    language_method_instance_t *ml = (language_method_instance_t*)language_svecref(data, idx);
+    language_method_instance_t *ml = (language_method_instance_t*)language_svecref(data, idx); // This must always happen inside the lock
     language_value_t *sig = ml->specTypes;
     if (language_is_unionall(sig))
         sig = language_unwrap_unionall(sig);
@@ -136,6 +141,8 @@ static uint_t speccache_hash(size_t idx, language_value_t *data)
 
 static int speccache_eq(size_t idx, const void *ty, language_value_t *data, uint_t hv)
 {
+    if (idx >= language_svec_len(data))
+        return 0; // We got a OOB access, probably due to a data race
     language_method_instance_t *ml = (language_method_instance_t*)language_svecref(data, idx);
     language_value_t *sig = ml->specTypes;
     if (ty == sig)
@@ -334,7 +341,7 @@ language_datatype_t *language_mk_builtin_func(language_datatype_t *dt, const cha
 
     language_code_instance_t *codeinst = language_new_codeinst(mi, language_nothing,
         (language_value_t*)language_any_type, (language_value_t*)language_any_type, language_nothing, language_nothing,
-        0, 1, ~(size_t)0, 0, 0, language_nothing, 0, NULL);
+        0, 1, ~(size_t)0, 0, language_nothing, 0, NULL);
     language_mi_cache_insert(mi, codeinst);
     language_atomic_store_relaxed(&codeinst->specptr.fptr1, fptr);
     language_atomic_store_relaxed(&codeinst->invoke, language_fptr_args);
@@ -352,7 +359,7 @@ language_datatype_t *language_mk_builtin_func(language_datatype_t *dt, const cha
 // returns the inferred source, and may cache the result in mi
 // if successful, also updates the mi argument to describe the validity of this src
 // if inference doesn't occur (or can't finish), returns NULL instead
-language_code_instance_t *language_type_infer(language_method_instance_t *mi, size_t world, int force, uint8_t source_mode)
+language_code_instance_t *language_type_infer(language_method_instance_t *mi, size_t world, uint8_t source_mode)
 {
     if (language_typeinf_func == NULL)
         return NULL;
@@ -368,7 +375,7 @@ language_code_instance_t *language_type_infer(language_method_instance_t *mi, si
 
     language_code_instance_t *ci = NULL;
 #ifdef ENABLE_INFERENCE
-    if (mi->inInference && !force)
+    if (language_engine_hasreserved(mi, language_nothing)) // don't recur on a thread on the same MethodInstance--force it to interpret it until the inference has finished
         return NULL;
     LANGUAGE_TIMING(INFERENCE, INFERENCE);
     language_value_t **fargs;
@@ -394,7 +401,6 @@ language_code_instance_t *language_type_infer(language_method_instance_t *mi, si
     ct->ptls->in_pure_callback = 0;
     size_t last_age = ct->world_age;
     ct->world_age = language_typeinf_world;
-    mi->inInference = 1;
     // first bit is for reentrant timing,
     // so adding 1 to the bit above performs
     // inference reentrancy counter addition.
@@ -419,7 +425,7 @@ language_code_instance_t *language_type_infer(language_method_instance_t *mi, si
             language_printf((LANGUAGE_STREAM*)STDERR_FILENO, "unexpected error in runtime:\n");
             language_static_show((LANGUAGE_STREAM*)STDERR_FILENO, e);
             language_printf((LANGUAGE_STREAM*)STDERR_FILENO, "\n");
-            jlbacktrace(); // written to STDERR_FILENO
+            languagebacktrace(); // written to STDERR_FILENO
         }
         ci = NULL;
 #ifndef LANGUAGE_NDEBUG
@@ -429,7 +435,6 @@ language_code_instance_t *language_type_infer(language_method_instance_t *mi, si
     ct->world_age = last_age;
     ct->reentrant_timing -= 0b10;
     ct->ptls->in_pure_callback = last_pure;
-    mi->inInference = 0;
 #ifdef _OS_WINDOWS_
     SetLastError(last_error);
 #endif
@@ -441,6 +446,44 @@ language_code_instance_t *language_type_infer(language_method_instance_t *mi, si
     LANGUAGE_GC_POP();
 #endif
 
+    return ci;
+}
+
+// Attempt to run `Core.Compiler.code_typed` on the lambda "mi"
+LANGUAGE_DLLEXPORT language_code_info_t *language_gdbcodetyped1(language_method_instance_t *mi, size_t world)
+{
+    language_task_t *ct = language_current_task;
+    language_code_info_t *ci = NULL;
+    int last_errno = errno;
+#ifdef _OS_WINDOWS_
+    DWORD last_error = GetLastError();
+#endif
+    int last_pure = ct->ptls->in_pure_callback;
+    ct->ptls->in_pure_callback = 0;
+    size_t last_age = ct->world_age;
+    ct->world_age = language_typeinf_world;
+    language_value_t **fargs;
+    LANGUAGE_GC_PUSHARGS(fargs, 4);
+    language_module_t *CC = (language_module_t*)language_get_global(language_core_module, language_symbol("Compiler"));
+    if (CC != NULL && language_is_module(CC)) {
+        fargs[0] = language_get_global(CC, language_symbol("NativeInterpreter"));;
+        fargs[1] = language_box_ulong(world);
+        fargs[1] = language_apply(fargs, 2);
+        fargs[0] = language_get_global(CC, language_symbol("typeinf_code"));
+        fargs[2] = (language_value_t*)mi;
+        fargs[3] = language_true;
+        ci = (language_code_info_t*)language_apply(fargs, 4);
+    }
+    ct->world_age = last_age;
+    ct->ptls->in_pure_callback = last_pure;
+#ifdef _OS_WINDOWS_
+    SetLastError(last_error);
+#endif
+    errno = last_errno;
+    if (ci && !language_is_code_info(ci)) {
+        ci = NULL;
+    }
+    LANGUAGE_GC_POP();
     return ci;
 }
 
@@ -479,7 +522,7 @@ LANGUAGE_DLLEXPORT language_code_instance_t *language_get_method_inferred(
     }
     codeinst = language_new_codeinst(
         mi, owner, rettype, (language_value_t*)language_any_type, NULL, NULL,
-        0, min_world, max_world, 0, 0, language_nothing, 0, edges);
+        0, min_world, max_world, 0, language_nothing, 0, edges);
     language_mi_cache_insert(mi, codeinst);
     return codeinst;
 }
@@ -501,7 +544,7 @@ LANGUAGE_DLLEXPORT language_code_instance_t *language_new_codeinst(
         language_value_t *rettype, language_value_t *exctype,
         language_value_t *inferred_const, language_value_t *inferred,
         int32_t const_flags, size_t min_world, size_t max_world,
-        uint32_t ipo_effects, uint32_t effects, language_value_t *analysis_results,
+        uint32_t effects, language_value_t *analysis_results,
         uint8_t relocatability,
         language_debuginfo_t *edges /* , int absolute_max*/)
 {
@@ -519,7 +562,7 @@ LANGUAGE_DLLEXPORT language_code_instance_t *language_new_codeinst(
     if ((const_flags & 2) == 0)
         inferred_const = NULL;
     codeinst->rettype_const = inferred_const;
-    language_atomic_store_relaxed(&codeinst->debuginfo, edges);
+    language_atomic_store_relaxed(&codeinst->debuginfo, (language_value_t*)edges == language_nothing ? NULL : edges);
     language_atomic_store_relaxed(&codeinst->specptr.fptr, NULL);
     language_atomic_store_relaxed(&codeinst->invoke, NULL);
     if ((const_flags & 1) != 0) {
@@ -529,10 +572,70 @@ LANGUAGE_DLLEXPORT language_code_instance_t *language_new_codeinst(
     language_atomic_store_relaxed(&codeinst->specsigflags, 0);
     language_atomic_store_relaxed(&codeinst->precompile, 0);
     language_atomic_store_relaxed(&codeinst->next, NULL);
-    codeinst->ipo_purity_bits = ipo_effects;
-    language_atomic_store_relaxed(&codeinst->purity_bits, effects);
+    language_atomic_store_relaxed(&codeinst->ipo_purity_bits, effects);
     codeinst->analysis_results = analysis_results;
     codeinst->relocatability = relocatability;
+    return codeinst;
+}
+
+LANGUAGE_DLLEXPORT void language_update_codeinst(
+        language_code_instance_t *codeinst, language_value_t *inferred,
+        int32_t const_flags, size_t min_world, size_t max_world,
+        uint32_t effects, language_value_t *analysis_results,
+        uint8_t relocatability, language_debuginfo_t *edges /* , int absolute_max*/)
+{
+    codeinst->relocatability = relocatability;
+    codeinst->analysis_results = analysis_results;
+    language_gc_wb(codeinst, analysis_results);
+    language_atomic_store_relaxed(&codeinst->ipo_purity_bits, effects);
+    language_atomic_store_relaxed(&codeinst->debuginfo, edges);
+    language_gc_wb(codeinst, edges);
+    if ((const_flags & 1) != 0) {
+        assert(codeinst->rettype_const);
+        language_atomic_store_release(&codeinst->invoke, language_fptr_const_return);
+    }
+    language_atomic_store_release(&codeinst->inferred, inferred);
+    language_gc_wb(codeinst, inferred);
+    language_atomic_store_relaxed(&codeinst->min_world, min_world); // XXX: these should be unchanged?
+    language_atomic_store_relaxed(&codeinst->max_world, max_world); // since the edges shouldn't change after language_fill_codeinst
+}
+
+LANGUAGE_DLLEXPORT void language_fill_codeinst(
+        language_code_instance_t *codeinst,
+        language_value_t *rettype, language_value_t *exctype,
+        language_value_t *inferred_const,
+        int32_t const_flags, size_t min_world, size_t max_world,
+        uint32_t effects, language_value_t *analysis_results,
+        language_debuginfo_t *edges /* , int absolute_max*/)
+{
+    assert(min_world <= max_world && "attempting to set invalid world constraints");
+    codeinst->rettype = rettype;
+    language_gc_wb(codeinst, rettype);
+    codeinst->exctype = exctype;
+    language_gc_wb(codeinst, exctype);
+    if ((const_flags & 2) != 0) {
+        codeinst->rettype_const = inferred_const;
+        language_gc_wb(codeinst, inferred_const);
+    }
+    language_atomic_store_relaxed(&codeinst->debuginfo, (language_value_t*)edges == language_nothing ? NULL : edges);
+    language_gc_wb(codeinst, edges);
+    if ((const_flags & 1) != 0) {
+        // TODO: may want to follow ordering restrictions here (see jitlayers.cpp)
+        assert(const_flags & 2);
+        language_atomic_store_release(&codeinst->invoke, language_fptr_const_return);
+    }
+    language_atomic_store_relaxed(&codeinst->ipo_purity_bits, effects);
+    codeinst->analysis_results = analysis_results;
+    assert(language_atomic_load_relaxed(&codeinst->min_world) == 1);
+    assert(language_atomic_load_relaxed(&codeinst->max_world) == 0);
+    language_atomic_store_release(&codeinst->min_world, min_world);
+    language_atomic_store_release(&codeinst->max_world, max_world);
+}
+
+LANGUAGE_DLLEXPORT language_code_instance_t *language_new_codeinst_uninit(language_method_instance_t *mi, language_value_t *owner)
+{
+    language_code_instance_t *codeinst = language_new_codeinst(mi, owner, NULL, NULL, NULL, NULL, 0, 0, 0, 0, NULL, 0, NULL);
+    language_atomic_store_relaxed(&codeinst->min_world, 1); // make temporarily invalid before returning, so that language_fill_codeinst is valid later
     return codeinst;
 }
 
@@ -717,7 +820,7 @@ LANGUAGE_DLLEXPORT void language_set_typeinf_func(language_value_t *f)
         for (i = 0, l = language_array_nrows(unspec); i < l; i++) {
             language_method_instance_t *mi = (language_method_instance_t*)language_array_ptr_ref(unspec, i);
             if (language_rettype_inferred_native(mi, world, world) == language_nothing)
-                language_type_infer(mi, world, 1, SOURCE_MODE_NOT_REQUIRED);
+                language_type_infer(mi, world, SOURCE_MODE_NOT_REQUIRED);
         }
         LANGUAGE_GC_POP();
     }
@@ -1728,7 +1831,7 @@ LANGUAGE_DLLEXPORT void language_method_instance_add_backedge(language_method_in
 {
     LANGUAGE_LOCK(&callee->def.method->writelock);
     if (invokesig == language_nothing)
-        invokesig = NULL;      // julia uses `nothing` but C uses NULL (#undef)
+        invokesig = NULL;      // language uses `nothing` but C uses NULL (#undef)
     int found = 0;
     // TODO: use language_cache_type_(invokesig) like cache_method does to save memory
     if (!callee->backedges) {
@@ -2429,7 +2532,7 @@ language_code_instance_t *language_method_inferred_with_abi(language_method_inst
 
 language_mutex_t precomp_statement_out_lock;
 
-static void record_precompile_statement(language_method_instance_t *mi)
+static void record_precompile_statement(language_method_instance_t *mi, double compilation_time)
 {
     static ios_t f_precompile;
     static LANGUAGE_STREAM* s_precompile = NULL;
@@ -2452,6 +2555,8 @@ static void record_precompile_statement(language_method_instance_t *mi)
         }
     }
     if (!language_has_free_typevars(mi->specTypes)) {
+        if (language_options.trace_compile_timing)
+            language_printf(s_precompile, "#= %6.1f ms =# ", compilation_time / 1e6);
         language_printf(s_precompile, "precompile(");
         language_static_show(s_precompile, mi->specTypes);
         language_printf(s_precompile, ")\n");
@@ -2537,7 +2642,7 @@ language_code_instance_t *language_compile_method_internal(language_method_insta
                 if (unspec && (unspec_invoke = language_atomic_load_acquire(&unspec->invoke))) {
                     language_code_instance_t *codeinst = language_new_codeinst(mi, language_nothing,
                         (language_value_t*)language_any_type, (language_value_t*)language_any_type, NULL, NULL,
-                        0, 1, ~(size_t)0, 0, 0, language_nothing, 0, NULL);
+                        0, 1, ~(size_t)0, 0, language_nothing, 0, NULL);
                     void *unspec_fptr = language_atomic_load_relaxed(&unspec->specptr.fptr);
                     if (unspec_fptr) {
                         // wait until invoke and specsigflags are properly set
@@ -2550,7 +2655,7 @@ language_code_instance_t *language_compile_method_internal(language_method_insta
                     codeinst->rettype_const = unspec->rettype_const;
                     language_atomic_store_release(&codeinst->invoke, unspec_invoke);
                     language_mi_cache_insert(mi, codeinst);
-                    record_precompile_statement(mi);
+                    record_precompile_statement(mi, 0);
                     return codeinst;
                 }
             }
@@ -2564,10 +2669,10 @@ language_code_instance_t *language_compile_method_internal(language_method_insta
         if (!language_code_requires_compiler(src, 0)) {
             language_code_instance_t *codeinst = language_new_codeinst(mi, language_nothing,
                 (language_value_t*)language_any_type, (language_value_t*)language_any_type, NULL, NULL,
-                0, 1, ~(size_t)0, 0, 0, language_nothing, 0, NULL);
+                0, 1, ~(size_t)0, 0, language_nothing, 0, NULL);
             language_atomic_store_release(&codeinst->invoke, language_fptr_interpret_call);
             language_mi_cache_insert(mi, codeinst);
-            record_precompile_statement(mi);
+            record_precompile_statement(mi, 0);
             return codeinst;
         }
         if (compile_option == LANGUAGE_OPTIONS_COMPILE_OFF) {
@@ -2587,13 +2692,15 @@ language_code_instance_t *language_compile_method_internal(language_method_insta
     int is_recompile = language_atomic_load_relaxed(&mi->cache) != NULL;
 
     // This codeinst hasn't been previously inferred do that now
+    // language_type_infer will internally do a cache lookup and language_engine_reserve call
+    // to synchronize this across threads
     if (!codeinst) {
         // Don't bother inferring toplevel thunks or macros - the performance cost of inference is likely
         // to significantly exceed the actual runtime.
         int should_skip_inference = !language_is_method(mi->def.method) || language_symbol_name(mi->def.method->name)[0] == '@';
 
         if (!should_skip_inference) {
-            codeinst = language_type_infer(mi, world, 0, SOURCE_MODE_ABI);
+            codeinst = language_type_infer(mi, world, SOURCE_MODE_ABI);
         }
     }
 
@@ -2605,13 +2712,16 @@ language_code_instance_t *language_compile_method_internal(language_method_insta
         }
 
         LANGUAGE_GC_PUSH1(&codeinst);
+        double compile_time = language_hrtime();
         int did_compile = language_compile_codeinst(codeinst);
+        compile_time = language_hrtime() - compile_time;
 
         if (language_atomic_load_relaxed(&codeinst->invoke) == NULL) {
             // Something went wrong. Bail to the fallback path.
             codeinst = NULL;
-        } else if (did_compile) {
-            record_precompile_statement(mi);
+        }
+        else if (did_compile) {
+            record_precompile_statement(mi, compile_time);
         }
         LANGUAGE_GC_POP();
     }
@@ -2639,7 +2749,7 @@ language_code_instance_t *language_compile_method_internal(language_method_insta
         }
         codeinst = language_new_codeinst(mi, language_nothing,
             (language_value_t*)language_any_type, (language_value_t*)language_any_type, NULL, NULL,
-            0, 1, ~(size_t)0, 0, 0, language_nothing, 0, NULL);
+            0, 1, ~(size_t)0, 0, language_nothing, 0, NULL);
         void *unspec_fptr = language_atomic_load_relaxed(&ucache->specptr.fptr);
         if (unspec_fptr) {
             // wait until invoke and specsigflags are properly set
@@ -2888,7 +2998,7 @@ static void _generate_from_hint(language_method_instance_t *mi, size_t world)
 {
     language_value_t *codeinst = language_rettype_inferred_native(mi, world, world);
     if (codeinst == language_nothing) {
-        (void)language_type_infer(mi, world, 1, SOURCE_MODE_NOT_REQUIRED);
+        (void)language_type_infer(mi, world, SOURCE_MODE_NOT_REQUIRED);
         codeinst = language_rettype_inferred_native(mi, world, world);
     }
     if (codeinst != language_nothing) {
@@ -2929,10 +3039,10 @@ LANGUAGE_DLLEXPORT void language_compile_method_instance(language_method_instanc
             LANGUAGE_GC_POP();
             language_atomic_store_relaxed(&mi2->precompiled, 1);
             if (language_rettype_inferred_native(mi2, world, world) == language_nothing)
-                (void)language_type_infer(mi2, world, 1, SOURCE_MODE_NOT_REQUIRED);
+                (void)language_type_infer(mi2, world, SOURCE_MODE_NOT_REQUIRED);
             if (language_typeinf_func && language_atomic_load_relaxed(&mi->def.method->primary_world) <= tworld) {
                 if (language_rettype_inferred_native(mi2, tworld, tworld) == language_nothing)
-                    (void)language_type_infer(mi2, tworld, 1, SOURCE_MODE_NOT_REQUIRED);
+                    (void)language_type_infer(mi2, tworld, SOURCE_MODE_NOT_REQUIRED);
             }
         }
     }
@@ -4129,16 +4239,6 @@ LANGUAGE_DLLEXPORT void language_typeinf_timing_end(uint64_t start, int is_recom
             language_atomic_fetch_add_relaxed(&language_cumulative_recompile_time, inftime);
         }
     }
-}
-
-LANGUAGE_DLLEXPORT void language_typeinf_lock_begin(void)
-{
-    LANGUAGE_LOCK(&language_codegen_lock);
-}
-
-LANGUAGE_DLLEXPORT void language_typeinf_lock_end(void)
-{
-    LANGUAGE_UNLOCK(&language_codegen_lock);
 }
 
 #ifdef __cplusplus
