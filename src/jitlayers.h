@@ -1,18 +1,4 @@
-/*
- * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
- * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
-  *
- * This code is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
- * version 2 for more details (a copy is included in the LICENSE file that
- * accompanied this code).
- *
- * Contact with ITGSS, 651 N Broad St, Suite 201, in the
- * city of Middletown, zip code 19709, and county of New Castle, state of Delaware.
- * or visit www.it-gss.com if you need additional information or have any
- * questions.
- */
+
 
 #include <llvm/ADT/MapVector.h>
 #include <llvm/ADT/StringSet.h>
@@ -42,7 +28,6 @@
 #include "llvm-codegen-shared.h"
 #include <stack>
 #include <queue>
-
 
 
 // As of LLVM 13, there are two runtime JIT linker implementations, the older
@@ -193,7 +178,7 @@ struct language_locked_stream {
 };
 
 typedef struct _language_llvm_functions_t {
-    std::string functionObject;     // jlcall llvm Function name
+    std::string functionObject;     // languagecall llvm Function name
     std::string specFunctionObject; // specialized llvm Function name
 } language_llvm_functions_t;
 
@@ -276,9 +261,7 @@ language_llvm_functions_t language_emit_code(
         orc::ThreadSafeModule &M,
         language_method_instance_t *mi,
         language_code_info_t *src,
-        language_value_t *jlrettype,
-        language_codegen_params_t &params,
-        size_t min_world, size_t max_world);
+        language_codegen_params_t &params);
 
 language_llvm_functions_t language_emit_codeinst(
         orc::ThreadSafeModule &M,
@@ -369,7 +352,7 @@ using CompilerResultT = Expected<std::unique_ptr<llvm::MemoryBuffer>>;
 using OptimizerResultT = Expected<orc::ThreadSafeModule>;
 using SharedBytesT = StringSet<MaxAlignedAllocImpl<sizeof(StringSet<>::MapEntryTy)>>;
 
-class JuliaOJIT {
+class LanguageOJIT {
 public:
 #ifdef LANGUAGE_USE_JITLINK
     typedef orc::ObjectLinkingLayer ObjLayerT;
@@ -513,14 +496,14 @@ public:
     struct DLSymOptimizer;
 
 private:
-    // Custom object emission notification handler for the JuliaOJIT
+    // Custom object emission notification handler for the LanguageOJIT
     template <typename ObjT, typename LoadResult>
     void registerObject(const ObjT &Obj, const LoadResult &LO);
 
 public:
 
-    JuliaOJIT() LANGUAGE_NOTSAFEPOINT;
-    ~JuliaOJIT() LANGUAGE_NOTSAFEPOINT;
+    LanguageOJIT() LANGUAGE_NOTSAFEPOINT;
+    ~LanguageOJIT() LANGUAGE_NOTSAFEPOINT;
 
     void enableJITDebuggingSupport() LANGUAGE_NOTSAFEPOINT;
 #ifndef LANGUAGE_USE_JITLINK
@@ -633,7 +616,7 @@ private:
     DepsVerifyLayerT DepsVerifyLayer;
     CompileLayerT ExternalCompileLayer;
 };
-extern JuliaOJIT *language_ExecutionEngine;
+extern LanguageOJIT *language_ExecutionEngine;
 std::unique_ptr<Module> language_create_llvm_module(StringRef name, LLVMContext &ctx, const DataLayout &DL = language_ExecutionEngine->getDataLayout(), const Triple &triple = language_ExecutionEngine->getTargetTriple()) LANGUAGE_NOTSAFEPOINT;
 inline orc::ThreadSafeModule language_create_ts_module(StringRef name, orc::ThreadSafeContext ctx, const DataLayout &DL = language_ExecutionEngine->getDataLayout(), const Triple &triple = language_ExecutionEngine->getTargetTriple()) LANGUAGE_NOTSAFEPOINT {
     auto lock = ctx.getLock();
