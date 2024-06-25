@@ -1,9 +1,25 @@
-//===----------------------------------------------------------------------===//
-//
-// This class implements a disassembler of a memory block, given a function
-// pointer and size.
-//
-//===----------------------------------------------------------------------===//
+/*
+ * Copyright (c) 2024, NeXTech Corporation. All rights reserved.
+ * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+ *
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
+ *
+ * Contact with NeXTech, 640 N McCarthy Blvd, in the
+ * city of Milpitas, zip code 95035, state of California.
+ * or visit www.it-gss.com if you need additional information or have any
+ * questions.
+ *
+ */
+
+// About:
+// Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
+// Date: Sunday, May 19, 2024
+// Technology: C/C++20 - ISO/IEC 14882:2020(E) 
+// Purpose: This class implements a disassembler of a memory block, given a function pointer and size.
 
 #include <map>
 #include <set>
@@ -321,8 +337,8 @@ public:
 void LineNumberAnnotatedWriter::emitFunctionAnnot(
       const Function *F, formatted_raw_ostream &Out)
 {
-    if (F->hasFnAttribute("julia.fsig")) {
-        auto sig = F->getFnAttribute("julia.fsig").getValueAsString();
+    if (F->hasFnAttribute("language.fsig")) {
+        auto sig = F->getFnAttribute("language.fsig").getValueAsString();
         Out << "; Function Signature: " << sig << "\n";
     }
     InstrLoc = nullptr;
@@ -442,7 +458,7 @@ void language_strip_llvm_addrspaces(Module *m) LANGUAGE_NOTSAFEPOINT
 {
     PassBuilder PB;
     AnalysisManagers AM(PB);
-    RemoveJuliaAddrspacesPass().run(*m, AM.MAM);
+    RemoveLanguageAddrspacesPass().run(*m, AM.MAM);
 }
 
 // print an llvm IR acquired from language_get_llvmf
@@ -453,7 +469,7 @@ language_value_t *language_dump_function_ir_impl(language_llvmf_dump_t *dump, ch
     std::string code;
     raw_string_ostream stream(code);
 
-    {
+    if (dump->F) {
         //RAII will release the module
         auto TSM = std::unique_ptr<orc::ThreadSafeModule>(unwrap(dump->TSM));
         //If TSM is not passed in, then the context MUST be locked externally.
@@ -1158,7 +1174,7 @@ language_value_t *language_dump_function_asm_impl(language_llvmf_dump_t* dump, c
 {
     // precise printing via IR assembler
     SmallVector<char, 4096> ObjBufferSV;
-    { // scope block
+    if (dump->F) { // scope block also
         auto TSM = std::unique_ptr<orc::ThreadSafeModule>(unwrap(dump->TSM));
         llvm::raw_svector_ostream asmfile(ObjBufferSV);
         TSM->withModuleDo([&](Module &m) {
@@ -1215,7 +1231,7 @@ language_value_t *language_dump_function_asm_impl(language_llvmf_dump_t* dump, c
                 TM->getTarget().createAsmPrinter(*TM, std::move(S)));
             Printer->addAsmPrinterHandler(AsmPrinter::HandlerInfo(
                         std::unique_ptr<AsmPrinterHandler>(new LineNumberPrinterHandler(*Printer, debuginfo)),
-                        "emit", "Debug Info Emission", "Julia", "Julia::LineNumberPrinterHandler Markup"));
+                        "emit", "Debug Info Emission", "Language", "Language::LineNumberPrinterHandler Markup"));
             if (!Printer)
                 return language_an_empty_string;
             PM.add(Printer.release());
