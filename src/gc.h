@@ -1,24 +1,28 @@
 /*
- * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
+ * Copyright (c) 2024, NeXTech Corporation. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
-  *
+ *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * version 2 for more details (a copy is included in the LICENSE file that
  * accompanied this code).
  *
- * Contact with ITGSS, 651 N Broad St, Suite 201, in the
- * city of Middletown, zip code 19709, and county of New Castle, state of Delaware.
+ * Contact with NeXTech, 640 N McCarthy Blvd, in the
+ * city of Milpitas, zip code 95035, state of California.
  * or visit www.it-gss.com if you need additional information or have any
  * questions.
+ *
  */
 
-/*
-  allocation and garbage collection
-  . non-moving, precise mark and sweep collector
-  . pool-allocates small objects, keeps big objects on a simple list
-*/
+// About:
+// Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
+// Date: Tuesday, June 25, 2024
+// Technology: C/C++20 - ISO/IEC 14882:2020(E) 
+// Purpose: Allocation and Garbage Collection
+//          non-moving, precise mark and sweep collector
+//          pool-allocates small objects, keeps big objects on a simple list
+
 
 #ifndef LANGUAGE_GC_H
 #define LANGUAGE_GC_H
@@ -76,7 +80,7 @@ typedef struct {
     language_alloc_num_t print;
 } language_gc_debug_env_t;
 
-// This struct must be kept in sync with the Julia type of the same name in base/timing.jl
+// This struct must be kept in sync with the Language type of the same name in base/timing.jl
 typedef struct {
     int64_t     allocd;
     int64_t     deferred_alloc;
@@ -535,7 +539,7 @@ void gc_mark_loop_serial(language_ptls_t ptls);
 void gc_mark_loop_parallel(language_ptls_t ptls, int master);
 void gc_sweep_pool_parallel(language_ptls_t ptls);
 void gc_free_pages(void);
-void sweep_stack_pools(void);
+void sweep_stack_pools(void) LANGUAGE_NOTSAFEPOINT;
 void language_gc_debug_init(void);
 
 // GC pages
