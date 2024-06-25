@@ -1,18 +1,25 @@
 /*
- * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
+ * Copyright (c) 2024, NeXTech Corporation. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
-  *
+ *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * version 2 for more details (a copy is included in the LICENSE file that
  * accompanied this code).
  *
- * Contact with ITGSS, 651 N Broad St, Suite 201, in the
- * city of Middletown, zip code 19709, and county of New Castle, state of Delaware.
+ * Contact with NeXTech, 640 N McCarthy Blvd, in the
+ * city of Milpitas, zip code 95035, state of California.
  * or visit www.it-gss.com if you need additional information or have any
  * questions.
+ *
  */
+
+// About:
+// Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
+// Date: Sunday, May 19, 2024
+// Technology: C/C++20 - ISO/IEC 14882:2020(E) 
+// Purpose: Interpreting System
 
 #include <stdlib.h>
 #include <setjmp.h>
@@ -150,10 +157,10 @@ static language_value_t *do_invoke(language_value_t **args, size_t nargs, interp
     LANGUAGE_GC_PUSHARGS(argv, nargs - 1);
     size_t i;
     for (i = 1; i < nargs; i++)
-        argv[i] = eval_value(args[i], s);
+        argv[i-1] = eval_value(args[i], s);
     language_method_instance_t *meth = (language_method_instance_t*)args[0];
     assert(language_is_method_instance(meth));
-    language_value_t *result = language_invoke(argv[1], &argv[2], nargs - 2, meth);
+    language_value_t *result = language_invoke(argv[0], nargs == 2 ? NULL : &argv[1], nargs - 2, meth);
     LANGUAGE_GC_POP();
     return result;
 }
@@ -312,7 +319,7 @@ static language_value_t *eval_value(language_value_t *e, interpreter_state *s)
             argv[i] = eval_value(args[i], s);
         LANGUAGE_NARGSV(new_opaque_closure, 4);
         language_value_t *ret = (language_value_t*)language_new_opaque_closure((language_tupletype_t*)argv[0], argv[1], argv[2],
-            argv[3], argv+4, nargs-4, 1);
+            argv[4], argv+5, nargs-5, 1);
         LANGUAGE_GC_POP();
         return ret;
     }
@@ -543,6 +550,7 @@ static language_value_t *eval_body(language_array_t *stmts, interpreter_state *s
                 language_value_t *new_scope = eval_value(language_enternode_scope(stmt), s);
                 ct->scope = new_scope;
                 if (!language_setjmp(__eh.eh_ctx, 1)) {
+                    ct->eh = &__eh;
                     eval_body(stmts, s, next_ip, toplevel);
                     language_unreachable();
                 }
@@ -551,6 +559,7 @@ static language_value_t *eval_body(language_array_t *stmts, interpreter_state *s
             }
             else {
                 if (!language_setjmp(__eh.eh_ctx, 1)) {
+                    ct->eh = &__eh;
                     eval_body(stmts, s, next_ip, toplevel);
                     language_unreachable();
                 }
@@ -583,9 +592,13 @@ static language_value_t *eval_body(language_array_t *stmts, interpreter_state *s
                 else {
                     language_module_t *modu;
                     language_sym_t *sym;
+                    // Plain assignment is allowed to create bindings at
+                    // toplevel and only for the current module
+                    int alloc = toplevel;
                     if (language_is_globalref(lhs)) {
                         modu = language_globalref_mod(lhs);
                         sym = language_globalref_name(lhs);
+                        alloc &= modu == s->module;
                     }
                     else {
                         assert(language_is_symbol(lhs));
@@ -593,7 +606,7 @@ static language_value_t *eval_body(language_array_t *stmts, interpreter_state *s
                         sym = (language_sym_t*)lhs;
                     }
                     LANGUAGE_GC_PUSH1(&rhs);
-                    language_binding_t *b = language_get_binding_wr(modu, sym);
+                    language_binding_t *b = language_get_binding_wr(modu, sym, alloc);
                     language_checked_assignment(b, modu, sym, rhs);
                     LANGUAGE_GC_POP();
                 }
@@ -635,6 +648,18 @@ static language_value_t *eval_body(language_array_t *stmts, interpreter_state *s
                 else if (head == language_toplevel_sym) {
                     language_value_t *res = language_toplevel_eval(s->module, stmt);
                     s->locals[language_source_nslots(s->src) + s->ip] = res;
+                }
+                else if (head == language_globaldecl_sym) {
+                    language_value_t *val = eval_value(language_exprarg(stmt, 1), s);
+                    s->locals[language_source_nslots(s->src) + s->ip] = val; // temporarily root
+                    language_declare_global(s->module, language_exprarg(stmt, 0), val);
+                    s->locals[language_source_nslots(s->src) + s->ip] = language_nothing;
+                }
+                else if (head == language_const_sym) {
+                    language_value_t *val = language_expr_nargs(stmt) == 1 ? NULL : eval_value(language_exprarg(stmt, 1), s);
+                    s->locals[language_source_nslots(s->src) + s->ip] = val; // temporarily root
+                    language_eval_const_decl(s->module, language_exprarg(stmt, 0), val);
+                    s->locals[language_source_nslots(s->src) + s->ip] = language_nothing;
                 }
                 else if (language_is_toplevel_only_expr(stmt)) {
                     language_toplevel_eval(s->module, stmt);
@@ -819,7 +844,13 @@ language_value_t *language_interpret_opaque_closure(language_opaque_closure_t *o
         assert(language_is_method_instance(specializations));
         language_method_instance_t *mi = (language_method_instance_t *)specializations;
         language_code_instance_t *ci = language_atomic_load_relaxed(&mi->cache);
-        code = language_uncompress_ir(source, ci, language_atomic_load_relaxed(&ci->inferred));
+        language_value_t *src = language_atomic_load_relaxed(&ci->inferred);
+        if (!src) {
+            // This can happen if somebody did :new_opaque_closure with broken IR. This is definitely bad
+            // and UB, but let's try to be slightly nicer than segfaulting here for people debugging.
+            language_error("Internal Error: Opaque closure with no source at all");
+        }
+        code = language_uncompress_ir(source, ci, src);
     }
     interpreter_state *s;
     unsigned nroots = language_source_nslots(code) + language_source_nssavalues(code) + 2;
@@ -913,17 +944,17 @@ LANGUAGE_DLLEXPORT size_t language_capture_interp_frame(language_bt_element_t *b
     int required_space = need_module ? 4 : 3;
     if (space_remaining < required_space)
         return 0; // Should not happen
-    size_t njlvalues = need_module ? 2 : 1;
-    uintptr_t entry_tags = language_bt_entry_descriptor(njlvalues, 0, LANGUAGE_BT_INTERP_FRAME_TAG, s->ip);
+    size_t nlanguagevalues = need_module ? 2 : 1;
+    uintptr_t entry_tags = language_bt_entry_descriptor(nlanguagevalues, 0, LANGUAGE_BT_INTERP_FRAME_TAG, s->ip);
     bt_entry[0].uintptr = LANGUAGE_BT_NON_PTR_ENTRY;
     bt_entry[1].uintptr = entry_tags;
-    bt_entry[2].jlvalue = s->ci  ? (language_value_t*)s->ci  :
+    bt_entry[2].languagevalue = s->ci  ? (language_value_t*)s->ci  :
                           s->mi  ? (language_value_t*)s->mi  :
                           s->src ? (language_value_t*)s->src : (language_value_t*)language_nothing;
     if (need_module) {
         // If we only have a CodeInfo (s->src), we are in a top level thunk and
         // need to record the module separately.
-        bt_entry[3].jlvalue = (language_value_t*)s->module;
+        bt_entry[3].languagevalue = (language_value_t*)s->module;
     }
     return required_space;
 }
