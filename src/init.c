@@ -214,7 +214,7 @@ static void language_close_item_atexit(uv_handle_t *handle)
 // means by destroying some old state before we start destroying that state in atexit hooks.
 void language_task_frame_noreturn(language_task_t *ct) LANGUAGE_NOTSAFEPOINT;
 
-// cause this process to exit with WEXITSTATUS(signo), after waiting to finish all julia, C, and C++ cleanup
+// cause this process to exit with WEXITSTATUS(signo), after waiting to finish all language, C, and C++ cleanup
 LANGUAGE_DLLEXPORT void language_exit(int exitcode)
 {
     language_atexit_hook(exitcode);
@@ -397,8 +397,8 @@ LANGUAGE_DLLEXPORT void language_postoutput_hook(void)
 void post_boot_hooks(void);
 void post_image_load_hooks(void);
 
-LANGUAGE_DLLEXPORT void *language_libjulia_internal_handle;
-LANGUAGE_DLLEXPORT void *language_libjulia_handle;
+LANGUAGE_DLLEXPORT void *language_liblanguage_internal_handle;
+LANGUAGE_DLLEXPORT void *language_liblanguage_handle;
 LANGUAGE_DLLEXPORT void *language_RTLD_DEFAULT_handle;
 LANGUAGE_DLLEXPORT void *language_exe_handle;
 #ifdef _OS_WINDOWS_
@@ -644,31 +644,31 @@ static const char *absformat(const char *in)
 static void language_resolve_sysimg_location(LANGUAGE_IMAGE_SEARCH rel)
 {
     // this function resolves the paths in language_options to absolute file locations as needed
-    // and it replaces the pointers to `julia_bindir`, `julia_bin`, `image_file`, and output file paths
+    // and it replaces the pointers to `language_bindir`, `language_bin`, `image_file`, and output file paths
     // it may fail, print an error, and exit(1) if any of these paths are longer than LANGUAGE_PATH_MAX
     //
     // note: if you care about lost memory, you should call the appropriate `free()` function
     // on the original pointer for each `char*` you've inserted into `language_options`, after
-    // calling `julia_init()`
+    // calling `language_init()`
     char *free_path = (char*)malloc_s(LANGUAGE_PATH_MAX);
     size_t path_size = LANGUAGE_PATH_MAX;
     if (uv_exepath(free_path, &path_size)) {
         language_error("fatal error: unexpected error while retrieving exepath");
     }
     if (path_size >= LANGUAGE_PATH_MAX) {
-        language_error("fatal error: language_options.julia_bin path too long");
+        language_error("fatal error: language_options.language_bin path too long");
     }
-    language_options.julia_bin = (char*)malloc_s(path_size + 1);
-    memcpy((char*)language_options.julia_bin, free_path, path_size);
-    ((char*)language_options.julia_bin)[path_size] = '\0';
-    if (!language_options.julia_bindir) {
-        language_options.julia_bindir = getenv("JULIA_BINDIR");
-        if (!language_options.julia_bindir) {
-            language_options.julia_bindir = dirname(free_path);
+    language_options.language_bin = (char*)malloc_s(path_size + 1);
+    memcpy((char*)language_options.language_bin, free_path, path_size);
+    ((char*)language_options.language_bin)[path_size] = '\0';
+    if (!language_options.language_bindir) {
+        language_options.language_bindir = getenv("JULIA_BINDIR");
+        if (!language_options.language_bindir) {
+            language_options.language_bindir = dirname(free_path);
         }
     }
-    if (language_options.julia_bindir)
-        language_options.julia_bindir = absrealpath(language_options.julia_bindir, 0);
+    if (language_options.language_bindir)
+        language_options.language_bindir = absrealpath(language_options.language_bindir, 0);
     free(free_path);
     free_path = NULL;
     if (language_options.image_file) {
@@ -676,7 +676,7 @@ static void language_resolve_sysimg_location(LANGUAGE_IMAGE_SEARCH rel)
             // build time path, relative to JULIA_BINDIR
             free_path = (char*)malloc_s(LANGUAGE_PATH_MAX);
             int n = snprintf(free_path, LANGUAGE_PATH_MAX, "%s" PATHSEPSTRING "%s",
-                             language_options.julia_bindir, language_options.image_file);
+                             language_options.language_bindir, language_options.image_file);
             if (n >= LANGUAGE_PATH_MAX || n < 0) {
                 language_error("fatal error: language_options.image_file path too long");
             }
@@ -741,7 +741,7 @@ static void restore_fp_env(void)
     }
 }
 
-static NOINLINE void _finish_julia_init(LANGUAGE_IMAGE_SEARCH rel, language_ptls_t ptls, language_task_t *ct);
+static NOINLINE void _finish_language_init(LANGUAGE_IMAGE_SEARCH rel, language_ptls_t ptls, language_task_t *ct);
 
 LANGUAGE_DLLEXPORT int language_default_debug_info_kind;
 
@@ -755,7 +755,7 @@ static void init_global_mutexes(void) {
     LANGUAGE_MUTEX_INIT(&profile_show_peek_cond_lock, "profile_show_peek_cond_lock");
 }
 
-LANGUAGE_DLLEXPORT void julia_init(LANGUAGE_IMAGE_SEARCH rel)
+LANGUAGE_DLLEXPORT void language_init(LANGUAGE_IMAGE_SEARCH rel)
 {
     // initialize many things, in no particular order
     // but generally running from simple platform things to optional
@@ -805,12 +805,12 @@ LANGUAGE_DLLEXPORT void julia_init(LANGUAGE_IMAGE_SEARCH rel)
     void *stack_lo, *stack_hi;
     language_init_stack_limits(1, &stack_lo, &stack_hi);
 
-    language_libjulia_internal_handle = language_find_dynamic_library_by_addr(&language_load_dynamic_library);
-    language_libjulia_handle = language_find_dynamic_library_by_addr(&language_any_type);
+    language_liblanguage_internal_handle = language_find_dynamic_library_by_addr(&language_load_dynamic_library);
+    language_liblanguage_handle = language_find_dynamic_library_by_addr(&language_any_type);
 #ifdef _OS_WINDOWS_
     language_exe_handle = GetModuleHandleA(NULL);
-    language_RTLD_DEFAULT_handle = language_libjulia_internal_handle;
-    language_ntdll_handle = language_dlopen("ntdll.dll", LANGUAGE_RTLD_NOLOAD); // bypass julia's pathchecking for system dlls
+    language_RTLD_DEFAULT_handle = language_liblanguage_internal_handle;
+    language_ntdll_handle = language_dlopen("ntdll.dll", LANGUAGE_RTLD_NOLOAD); // bypass language's pathchecking for system dlls
     language_kernel32_handle = language_dlopen("kernel32.dll", LANGUAGE_RTLD_NOLOAD);
     language_crtdll_handle = language_dlopen(language_crtdll_name, LANGUAGE_RTLD_NOLOAD);
     language_winsock_handle = language_dlopen("ws2_32.dll", LANGUAGE_RTLD_NOLOAD);
@@ -854,10 +854,10 @@ LANGUAGE_DLLEXPORT void julia_init(LANGUAGE_IMAGE_SEARCH rel)
     language_task_t *ct = language_init_root_task(ptls, stack_lo, stack_hi);
 #pragma GCC diagnostic pop
     LANGUAGE_GC_PROMISE_ROOTED(ct);
-    _finish_julia_init(rel, ptls, ct);
+    _finish_language_init(rel, ptls, ct);
 }
 
-static NOINLINE void _finish_julia_init(LANGUAGE_IMAGE_SEARCH rel, language_ptls_t ptls, language_task_t *ct)
+static NOINLINE void _finish_language_init(LANGUAGE_IMAGE_SEARCH rel, language_ptls_t ptls, language_task_t *ct)
 {
     LANGUAGE_TIMING(JULIA_INIT, JULIA_INIT);
     language_resolve_sysimg_location(rel);
