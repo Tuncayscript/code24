@@ -19,7 +19,6 @@
 // Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
 // Date: Tuesday, May 19, 2024
 // Technology: C/C++20 - ISO/IEC 14882:2020(E) 
-// Purpose:
 
 #include "gc.h"
 #ifndef _OS_WINDOWS_
