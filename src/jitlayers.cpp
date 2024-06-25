@@ -1,18 +1,25 @@
 /*
- * Copyright (c) 2024, ITGSS Corporation. All rights reserved.
+ * Copyright (c) 2024, NeXTech Corporation. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
-  *
+ *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
  * version 2 for more details (a copy is included in the LICENSE file that
  * accompanied this code).
  *
- * Contact with ITGSS, 651 N Broad St, Suite 201, in the
- * city of Middletown, zip code 19709, and county of New Castle, state of Delaware.
+ * Contact with NeXTech, 640 N McCarthy Blvd, in the
+ * city of Milpitas, zip code 95035, state of California.
  * or visit www.it-gss.com if you need additional information or have any
  * questions.
+ *
  */
+
+// About:
+// Author(-s): Tunjay Akbarli (tunjayakbarli@it-gss.com)
+// Date: Sunday, May 19, 2024
+// Technology: C/C++20 - ISO/IEC 14882:2020(E)
+// Purpose: Just-in-time (JIT) Compilation layer of NeXTCode Compiler
 
 #include "llvm-version.h"
 #include "platform.h"
@@ -62,7 +69,7 @@ using namespace llvm;
 # include <llvm/ExecutionEngine/Orc/MapperJITLinkMemoryManager.h>
 # include <llvm/ExecutionEngine/SectionMemoryManager.h>
 
-#define DEBUG_TYPE "language_jitlayers"
+#define DEBUG_TYPE "julia_jitlayers"
 
 STATISTIC(LinkedGlobals, "Number of globals linked");
 STATISTIC(CompiledCodeinsts, "Number of codeinsts compiled directly");
@@ -571,54 +578,13 @@ language_value_t *language_dump_method_asm_impl(language_method_instance_t *mi, 
     language_code_instance_t *codeinst = language_compile_method_internal(mi, world);
     if (codeinst) {
         uintptr_t fptr = (uintptr_t)language_atomic_load_acquire(&codeinst->invoke);
-        if (getwrapper)
-            return language_dump_fptr_asm(fptr, emit_mc, asm_variant, debuginfo, binary);
         uintptr_t specfptr = (uintptr_t)language_atomic_load_relaxed(&codeinst->specptr.fptr);
-        if (fptr == (uintptr_t)language_fptr_const_return_addr && specfptr == 0) {
-            // normally we prevent native code from being generated for these functions,
-            // (using sentinel value `1` instead)
-            // so create an exception here so we can print pretty our lies
-            auto ct = language_current_task;
-            bool timed = (ct->reentrant_timing & 1) == 0;
-            if (timed)
-                ct->reentrant_timing |= 1;
-            uint64_t compiler_start_time = 0;
-            uint8_t measure_compile_time_enabled = language_atomic_load_relaxed(&language_measure_compile_time_enabled);
-            if (measure_compile_time_enabled)
-                compiler_start_time = language_hrtime();
-            LANGUAGE_LOCK(&language_codegen_lock); // also disables finalizers, to prevent any unexpected recursion
-            specfptr = (uintptr_t)language_atomic_load_relaxed(&codeinst->specptr.fptr);
-            if (specfptr == 0) {
-                // Doesn't need SOURCE_MODE_FORCE_SOURCE_UNCACHED, because the codegen lock is held,
-                // so there's no concern that the ->inferred field will be deleted.
-                language_code_instance_t *forced_ci = language_type_infer(mi, world, 0, SOURCE_MODE_FORCE_SOURCE);
-                LANGUAGE_GC_PUSH1(&forced_ci);
-                if (forced_ci) {
-                    // Force compile of this codeinst even though it already has an ->invoke
-                    _language_compile_codeinst(forced_ci, NULL, *language_ExecutionEngine->getContext());
-                    specfptr = (uintptr_t)language_atomic_load_relaxed(&forced_ci->specptr.fptr);
-                }
-                LANGUAGE_GC_POP();
-            }
-            LANGUAGE_UNLOCK(&language_codegen_lock);
-            if (timed) {
-                if (measure_compile_time_enabled) {
-                    auto end = language_hrtime();
-                    language_atomic_fetch_add_relaxed(&language_cumulative_compile_time, end - compiler_start_time);
-                }
-                ct->reentrant_timing &= ~1ull;
-            }
-        }
+        if (getwrapper || specfptr == 0)
+            specfptr = fptr;
         if (specfptr != 0)
             return language_dump_fptr_asm(specfptr, emit_mc, asm_variant, debuginfo, binary);
     }
-
-    // whatever, that didn't work - use the assembler output instead
-    language_llvmf_dump_t llvmf_dump;
-    language_get_llvmf_defn(&llvmf_dump, mi, world, getwrapper, true, language_default_cgparams);
-    if (!llvmf_dump.F)
-        return language_an_empty_string;
-    return language_dump_function_asm(&llvmf_dump, emit_mc, asm_variant, debuginfo, binary, false);
+    return language_an_empty_string;
 }
 
 CodeGenOpt::Level CodeGenOptLevelFor(int optlevel)
@@ -1438,8 +1404,8 @@ struct JuliaOJIT::DLSymOptimizer {
 
         INIT_RUNTIME_LIBRARY(NULL, language_RTLD_DEFAULT_handle);
         INIT_RUNTIME_LIBRARY(LANGUAGE_EXE_LIBNAME, language_exe_handle);
-        INIT_RUNTIME_LIBRARY(LANGUAGE_LIBJULIA_INTERNAL_DL_LIBNAME, language_liblanguage_internal_handle);
-        INIT_RUNTIME_LIBRARY(LANGUAGE_LIBJULIA_DL_LIBNAME, language_liblanguage_handle);
+        INIT_RUNTIME_LIBRARY(LANGUAGE_LIBJULIA_INTERNAL_DL_LIBNAME, language_libjulia_internal_handle);
+        INIT_RUNTIME_LIBRARY(LANGUAGE_LIBJULIA_DL_LIBNAME, language_libjulia_handle);
 
 #undef INIT_RUNTIME_LIBRARY
     }
@@ -1486,7 +1452,7 @@ struct JuliaOJIT::DLSymOptimizer {
     void operator()(Module &M) {
         for (auto &GV : M.globals()) {
             auto Name = GV.getName();
-            if (Name.startswith("jlplt") && Name.endswith("got")) {
+            if (Name.startswith("languageplt") && Name.endswith("got")) {
                 auto fname = GV.getAttribute("julia.fname").getValueAsString().str();
                 void *addr;
                 if (GV.hasAttribute("julia.libname")) {
@@ -1702,9 +1668,9 @@ JuliaOJIT::JuliaOJIT()
     // Make sure that libjulia-internal is loaded and placed first in the
     // DynamicLibrary order so that calls to runtime intrinsics are resolved
     // to the correct library when multiple libjulia-*'s have been loaded
-    // (e.g. when we `ccall` into a PackageCompiler.jl-created shared library)
-    sys::DynamicLibrary liblanguage_internal_dylib = sys::DynamicLibrary::addPermanentLibrary(
-      language_liblanguage_internal_handle, &ErrorStr);
+    // (e.g. when we `ccall` into a PackageCompiler.language-created shared library)
+    sys::DynamicLibrary libjulia_internal_dylib = sys::DynamicLibrary::addPermanentLibrary(
+      language_libjulia_internal_handle, &ErrorStr);
     if(!ErrorStr.empty())
         report_fatal_error(llvm::Twine("FATAL: unable to dlopen libjulia-internal\n") + ErrorStr);
 
@@ -1716,7 +1682,7 @@ JuliaOJIT::JuliaOJIT()
 
     GlobalJD.addGenerator(
       std::make_unique<orc::DynamicLibrarySearchGenerator>(
-        liblanguage_internal_dylib,
+        libjulia_internal_dylib,
         DL.getGlobalPrefix(),
         orc::DynamicLibrarySearchGenerator::SymbolPredicate()));
 
@@ -1754,21 +1720,21 @@ JuliaOJIT::JuliaOJIT()
 #if defined(_CPU_X86_64_) && defined(_OS_DARWIN_) && LANGUAGE_LLVM_VERSION >= 160000
         // LLVM 16 reverted to soft-float ABI for passing half on x86_64 Darwin
         // https://github.com/llvm/llvm-project/commit/2bcf51c7f82ca7752d1bba390a2e0cb5fdd05ca9
-        { mangle("__gnu_h2f_ieee"), { mangle("language_half_to_float"),  JITSymbolFlags::Exported } },
-        { mangle("__extendhfsf2"),  { mangle("language_half_to_float"),  JITSymbolFlags::Exported } },
-        { mangle("__gnu_f2h_ieee"), { mangle("language_float_to_half"),  JITSymbolFlags::Exported } },
-        { mangle("__truncsfhf2"),   { mangle("language_float_to_half"),  JITSymbolFlags::Exported } },
-        { mangle("__truncdfhf2"),   { mangle("language_double_to_half"), JITSymbolFlags::Exported } },
+        { mangle("__gnu_h2f_ieee"), { mangle("julia_half_to_float"),  JITSymbolFlags::Exported } },
+        { mangle("__extendhfsf2"),  { mangle("julia_half_to_float"),  JITSymbolFlags::Exported } },
+        { mangle("__gnu_f2h_ieee"), { mangle("julia_float_to_half"),  JITSymbolFlags::Exported } },
+        { mangle("__truncsfhf2"),   { mangle("julia_float_to_half"),  JITSymbolFlags::Exported } },
+        { mangle("__truncdfhf2"),   { mangle("julia_double_to_half"), JITSymbolFlags::Exported } },
 #else
-        { mangle("__gnu_h2f_ieee"), { mangle("language__gnu_h2f_ieee"),  JITSymbolFlags::Exported } },
-        { mangle("__extendhfsf2"),  { mangle("language__gnu_h2f_ieee"),  JITSymbolFlags::Exported } },
-        { mangle("__gnu_f2h_ieee"), { mangle("language__gnu_f2h_ieee"),  JITSymbolFlags::Exported } },
-        { mangle("__truncsfhf2"),   { mangle("language__gnu_f2h_ieee"),  JITSymbolFlags::Exported } },
-        { mangle("__truncdfhf2"),   { mangle("language__truncdfhf2"),    JITSymbolFlags::Exported } },
+        { mangle("__gnu_h2f_ieee"), { mangle("julia__gnu_h2f_ieee"),  JITSymbolFlags::Exported } },
+        { mangle("__extendhfsf2"),  { mangle("julia__gnu_h2f_ieee"),  JITSymbolFlags::Exported } },
+        { mangle("__gnu_f2h_ieee"), { mangle("julia__gnu_f2h_ieee"),  JITSymbolFlags::Exported } },
+        { mangle("__truncsfhf2"),   { mangle("julia__gnu_f2h_ieee"),  JITSymbolFlags::Exported } },
+        { mangle("__truncdfhf2"),   { mangle("julia__truncdfhf2"),    JITSymbolFlags::Exported } },
 #endif
         // BFloat16 conversion routines
-        { mangle("__truncsfbf2"),   { mangle("language__truncsfbf2"),    JITSymbolFlags::Exported } },
-        { mangle("__truncdfbf2"),   { mangle("language__truncdfbf2"),    JITSymbolFlags::Exported } },
+        { mangle("__truncsfbf2"),   { mangle("julia__truncsfbf2"),    JITSymbolFlags::Exported } },
+        { mangle("__truncdfbf2"),   { mangle("julia__truncdfbf2"),    JITSymbolFlags::Exported } },
     };
     cantFail(GlobalJD.define(orc::symbolAliases(language_crt)));
 
@@ -2034,7 +2000,7 @@ StringRef JuliaOJIT::getFunctionAtAddress(uint64_t Addr, language_code_instance_
             stream_fname << "jsys3_";
         }
         else {
-            stream_fname << "jlsys_";
+            stream_fname << "languagesys_";
         }
         const char* unadorned_name = language_symbol_name(codeinst->def->def.method->name);
         stream_fname << unadorned_name << "_" << RLST_inc++;
@@ -2163,8 +2129,7 @@ void language_merge_module(orc::ThreadSafeModule &destTSM, orc::ThreadSafeModule
                     //        Init.push_back(cast_or_null<Constant>(Op));
                     //    for (auto &Op : sCA->operands())
                     //        Init.push_back(cast_or_null<Constant>(Op));
-                    //    Type *Int8PtrTy = Type::getInt8PtrTy(dest.getContext());
-                    //    ArrayType *ATy = ArrayType::get(Int8PtrTy, Init.size());
+                    //    ArrayType *ATy = ArrayType::get(PointerType::get(dest.getContext()), Init.size());
                     //    GlobalVariable *GV = new GlobalVariable(dest, ATy, dG->isConstant(),
                     //            GlobalValue::AppendingLinkage, ConstantArray::get(ATy, Init), "",
                     //            dG->getThreadLocalMode(), dG->getType()->getAddressSpace());
