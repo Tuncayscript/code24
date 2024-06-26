@@ -2,43 +2,39 @@
 
 NeXTCode is an innovative programming language that combines the efficiency and speed of Go with the elegance and practicality of Python. It's designed to be fast, safe, and suitable for both systems programming and rapid application development.
 ```
-module Geometry
+with Language;
 
-export Circle, print_total_area
+package Geometry is
+   type Circle is record
+      Radius : Float := 0.0;
+      Pi : Float := 3.14;
+   end record;
 
-# Define a Circle type with a single field for the radius
-struct Circle
-    radius::Float32
-    pi::Float32
-end
+   package CircleHelpers is
+      procedure Print_Total_Area(Circles : in out Vector of Circle);
+   end CircleHelpers;
+end Geometry;
 
-# Define a module with a function to print the total area of a list of circles
-module CircleHelpers
-    export print_total_area
+package body Geometry.CircleHelpers is
+   procedure Print_Total_Area(Circles : in out Vector of Circle) is
+      Total_Area : Float := 0.0;
+   begin
+      for Circle_Item of Circles loop
+         Total_Area := Total_Area + 3.14 * Circle_Item.Radius**2.0;
+      end loop;
+      Ada.Text_IO.Put_Line("Total area: " & Float'Image(Total_Area));
+   end Print_Total_Area;
+end Geometry.CircleHelpers;
 
-    # Function to calculate and print the total area of a list of circles
-    function print_total_area(circles::Vector{Circle})
-        total_area = 0.0f0
-        for circle in circles
-            total_area += 3.14 * circle.radius^2
-        end
-        println("Total area: ", total_area)
-    end
-end
+procedure Main is
+   Circles : Vector(1 .. 2) of Geometry.Circle := (
+      (Radius => 1.0, Pi => 3.14),
+      (Radius => 2.0, Pi => 3.14)
+   );
+begin
+   Geometry.CircleHelpers.Print_Total_Area(Circles);
+end Main;
 
-end # module Geometry
-
-# Main program
-function main()
-    # Create a list of Circle instances with different radii
-    circles = [
-        Circle(1.0f0),
-        Circle(2.0f0)
-    ]
-
-    # Call the function to print the total area
-    Geometry.CircleHelpers.print_total_area(circles)
-end
 ```
 ## Killer Features of the Language
 
