@@ -1,1 +1,0 @@
-@JULIA_SHLIB_SYMBOL_VERSION@ { global: *; };
