@@ -22,7 +22,7 @@ package body Geometry.CircleHelpers is
       for Circle_Item of Circles loop
          Total_Area := Total_Area + 3.14 * Circle_Item.Radius**2.0;
       end loop;
-      Ada.Text_IO.Put_Line("Total area: " & Float'Image(Total_Area));
+      output("Total area: " & Float'Image(Total_Area));
    end Print_Total_Area;
 end Geometry.CircleHelpers;
 
